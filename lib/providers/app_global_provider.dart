@@ -7,7 +7,9 @@ import '../services/scan_history_service.dart';
 import '../services/database_service.dart';
 import '../models/chat_message.dart';
 
-class AppGlobalProvider extends ChangeNotifier {
+import 'dart:async'; // Add async import for Timer
+
+class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
   final AIService _aiService = AIService();
   final SlipScannerService _scannerService = SlipScannerService();
   final ScanHistoryService _historyService = ScanHistoryService();
@@ -21,8 +23,13 @@ class AppGlobalProvider extends ChangeNotifier {
   bool _isScanning = false;
   bool get isScanning => _isScanning;
 
+  Timer? _scanTimer;
+
   Future<void> initialize() async {
     print("[AppGlobalProvider] Initializing...");
+    
+    // 0. Register Lifecycle Observer
+    WidgetsBinding.instance.addObserver(this);
     
     // 1. Initialize AI (Background)
     _initAI();
@@ -32,6 +39,27 @@ class AppGlobalProvider extends ChangeNotifier {
     Future.delayed(const Duration(seconds: 1), () {
       scanSlips(); 
     });
+
+    // 3. Periodic Scan (Every 60 Seconds)
+    _scanTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      print("[AppGlobalProvider] Periodic Scan Triggered");
+      scanSlips();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print("[AppGlobalProvider] App Resumed -> Triggering Scan");
+      scanSlips();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scanTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initAI() async {
@@ -82,7 +110,7 @@ class AppGlobalProvider extends ChangeNotifier {
       newImages.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
 
       if (newImages.isEmpty) {
-        print("[AppGlobalProvider] No new slips found.");
+        // print("[AppGlobalProvider] No new slips found."); // Reduce noise
         return 0;
       }
 
