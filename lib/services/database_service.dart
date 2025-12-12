@@ -1,6 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/transaction.dart';
 import '../models/chat_message.dart';
+import '../models/income_schedule.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -16,10 +17,26 @@ class DatabaseService {
     Hive.registerAdapter(TransactionAdapter());
     Hive.registerAdapter(ChatMessageAdapter());
     
-    _transactionBox = await Hive.openBox<Transaction>('expenses');
-    _chatBox = await Hive.openBox<ChatMessage>('chat_messages');
-    _settingsBox = await Hive.openBox('settings');
+    Hive.registerAdapter(IncomeScheduleAdapter());
+
+    _transactionBox = await _openBoxWithRecovery<Transaction>('expenses');
+    _chatBox = await _openBoxWithRecovery<ChatMessage>('chat_messages');
+    _settingsBox = await _openBoxWithRecovery('settings');
+    _incomeScheduleBox = await _openBoxWithRecovery<IncomeSchedule>('income_schedules');
   }
+
+  Future<Box<T>> _openBoxWithRecovery<T>(String name) async {
+    try {
+      return await Hive.openBox<T>(name);
+    } catch (e) {
+      print("Error opening box '$name': $e. Deleting and recreating...");
+      await Hive.deleteBoxFromDisk(name);
+      return await Hive.openBox<T>(name);
+    }
+  }
+
+  Box<IncomeSchedule>? _incomeScheduleBox;
+  Box<IncomeSchedule> get incomeScheduleBox => _incomeScheduleBox!;
 
   Future<void> addTransaction(String item, double price, {String category = 'Uncategorized', double qty = 1.0, DateTime? date, String? note, String? slipImagePath, String type = 'expense', String? source, String? scannedBank}) async {
     final transaction = Transaction(

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../core/constants.dart'; // For ChatMode and Prompts
 import '../../models/chat_message.dart';
+import '../../models/income_schedule.dart'; // Import IncomeSchedule
 import '../../services/ai_service.dart';
 import '../../services/database_service.dart';
 import '../../services/receipt_processor.dart';
@@ -23,6 +24,9 @@ import '../widgets/typing_indicator.dart';
 import '../../utils/transaction_helper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart'; // For Clipboard
+import '../widgets/favorite_chips.dart';
+import '../widgets/reminder_card.dart';
+import '../widgets/upcoming_list_modal.dart';
 import '../bill_scanner_screen.dart';
 class ChatConversationScreen extends StatefulWidget {
   final ChatMode mode;
@@ -233,6 +237,26 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
   }
 
+  Future<void> _injectIncomeTemplate(dynamic item) async {
+    // item is IncomeSchedule
+    final msg = ChatMessage(
+      text: "บันทึกรายรับ: ${item.title}",
+      isUser: false,
+      timestamp: DateTime.now(),
+      mode: 'income',
+      expenseData: [
+        {
+          'type': 'income',
+          'source': item.title,
+          'amount': item.amount,
+          'date': DateTime.now().toIso8601String(),
+        }
+      ],
+    );
+    await DatabaseService().addChatMessage(msg);
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
     final box = DatabaseService().chatBox;
@@ -266,13 +290,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: widget.onBack,
         ) : null,
-        actions: isExpense ? [
+        actions: [
+          if (isExpense)
           IconButton(
             icon: const Icon(Icons.receipt_long),
             tooltip: 'Scan Slips',
             onPressed: scanSlips,
           ),
-        ] : null,
+        ],
       ),
       body: Stack(
         children: [
@@ -398,7 +423,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 ),
               ),
 
-              // Input Area
+              // Input Area (Combined)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -411,50 +436,83 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     ),
                   ],
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(width: 4), // Reduced from 8
-                    // Camera Button
-                    IconButton(
-                      visualDensity: VisualDensity.compact, // Compact
-                      icon: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
-                      onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.camera),
-                    ),
-                    // Gallery Button
-                    IconButton(
-                      visualDensity: VisualDensity.compact, // Compact
-                      icon: Icon(Icons.photo_library_rounded, color: colorScheme.primary),
-                      onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.gallery),
-                    ),
-                    const SizedBox(width: 4), // Reduced from 8
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        decoration: InputDecoration(
-                          hintText: isExpense ? 'พิมพ์รายการจ่าย...' : 'พิมพ์รายรับ...',
-                          hintStyle: TextStyle(color: Colors.grey[500]),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
+                    // Row 1: Chips + Upcoming Button (Income Mode Only)
+                    if (!isExpense)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FavoriteChips(
+                              onSelected: (item) {
+                                _injectIncomeTemplate(item);
+                              },
+                            ),
                           ),
-                          filled: true,
-                          fillColor: theme.brightness == Brightness.dark 
-                              ? const Color(0xFF0F172A) // Darker input background in dark mode
-                              : colorScheme.surfaceVariant, 
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          IconButton(
+                            icon: const Icon(Icons.calendar_month),
+                            tooltip: 'Upcoming Income',
+                            onPressed: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (context) => const UpcomingListModal(),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    
+                    if (!isExpense) const SizedBox(height: 12), // Added spacing
+
+                    // Row 2: Input Field
+                    Row(
+                      children: [
+                        const SizedBox(width: 4), 
+                        // Camera Button
+                        IconButton(
+                          visualDensity: VisualDensity.compact, 
+                          icon: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                          onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.camera),
                         ),
-                        minLines: 1,
-                        maxLines: 3,
-                        style: TextStyle(color: colorScheme.onSurface),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    CircleAvatar(
-                      backgroundColor: colorScheme.primary, // Primary color button
-                      child: IconButton(
-                        icon: Icon(Icons.send, color: colorScheme.onPrimary), // Contrast icon
-                        onPressed: _isProcessing ? null : _sendMessage,
-                      ),
+                        // Gallery Button
+                        IconButton(
+                          visualDensity: VisualDensity.compact, 
+                          icon: Icon(Icons.photo_library_rounded, color: colorScheme.primary),
+                          onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.gallery),
+                        ),
+                        const SizedBox(width: 4), 
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            decoration: InputDecoration(
+                              hintText: isExpense ? 'พิมพ์รายการจ่าย...' : 'พิมพ์รายรับ...',
+                              hintStyle: TextStyle(color: Colors.grey[500]),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: theme.brightness == Brightness.dark 
+                                  ? const Color(0xFF0F172A) // Darker input background in dark mode
+                                  : colorScheme.surfaceVariant, 
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            ),
+                            minLines: 1,
+                            maxLines: 3,
+                            style: TextStyle(color: colorScheme.onSurface),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          backgroundColor: colorScheme.primary, // Primary color button
+                          child: IconButton(
+                            icon: Icon(Icons.send, color: colorScheme.onPrimary), // Contrast icon
+                            onPressed: _isProcessing ? null : _sendMessage,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -540,14 +598,21 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             
             // Result Card (Only for AI messages with data)
             if (!isUser && msg.expenseData != null && msg.expenseData!.isNotEmpty)
-              // Check type of first item to decide widget
-              (msg.expenseData![0]['type'] == 'income')
-                  ? AIIncomeCardWidget(
+              if (msg.expenseData![0]['type'] == 'reminder')
+                ReminderCard(
+                  message: msg,
+                  onActionCompleted: () {
+                    setState(() {}); // Refresh UI to show grayed out or updated state
+                  },
+                )
+              else if (msg.expenseData![0]['type'] == 'income')
+                  AIIncomeCardWidget(
                       message: msg,
                       onSave: (m) => _saveExpense(m, 0),
                       onDelete: _deleteMessage,
                     )
-                  : AIExpenseCardWidget(
+                  else
+                  AIExpenseCardWidget(
                       message: msg,
                       onSave: (m) => _saveExpense(m, 0),
                       onDelete: _deleteMessage,

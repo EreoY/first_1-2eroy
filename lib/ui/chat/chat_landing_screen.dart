@@ -6,6 +6,8 @@ import '../../services/database_service.dart'; // Import DatabaseService
 import '../../models/chat_message.dart'; // Import ChatMessage
 import '../../utils/transaction_helper.dart'; // Import TransactionHelper
 import '../widgets/custom_toast.dart'; // Import CustomToast
+import '../../providers/app_global_provider.dart';
+import 'package:provider/provider.dart';
 import 'chat_conversation_screen.dart';
 
 class ChatLandingScreen extends StatefulWidget {
@@ -110,30 +112,34 @@ class _ChatLandingScreenState extends State<ChatLandingScreen> with SingleTicker
                       children: [
                         _buildAnimatedItem(
                           delay: 200,
-                          child: ValueListenableBuilder(
-                            valueListenable: DatabaseService().chatBox.listenable(),
-                            builder: (context, Box<ChatMessage> box, _) {
-                              final unsavedCount = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).length;
-                              
-                              return _buildCleanChatCard(
-                                context,
-                                title: "บันทึกรายจ่าย",
-                                subtitle: "สแกนสลิป หรือพิมพ์รายการ",
-                                icon: Icons.receipt_long_rounded,
-                                color: Colors.redAccent,
-                                mode: ChatMode.expense,
-                                notificationCount: unsavedCount,
-                                onSaveAll: unsavedCount > 0 ? () async {
-                                  final messages = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).toList();
-                                  int saved = 0;
-                                  for (final msg in messages) {
-                                    await TransactionHelper.saveSlipAsTransaction(msg, Map<String, dynamic>.from(msg.slipData!));
-                                    saved++;
-                                  }
-                                  if (context.mounted) {
-                                    showTopRightToast(context, "บันทึก $saved รายการเรียบร้อย!");
-                                  }
-                                } : null,
+                          child: Consumer<AppGlobalProvider>(
+                            builder: (context, provider, _) {
+                              return ValueListenableBuilder(
+                                valueListenable: DatabaseService().chatBox.listenable(),
+                                builder: (context, Box<ChatMessage> box, _) {
+                                  final unsavedCount = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).length;
+                                  
+                                  return _buildCleanChatCard(
+                                    context,
+                                    title: "บันทึกรายจ่าย",
+                                    subtitle: "สแกนสลิป หรือพิมพ์รายการ",
+                                    icon: Icons.receipt_long_rounded,
+                                    color: Colors.redAccent,
+                                    mode: ChatMode.expense,
+                                    notificationCount: unsavedCount, // Use local count for slips
+                                    onSaveAll: unsavedCount > 0 ? () async {
+                                      final messages = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).toList();
+                                      int saved = 0;
+                                      for (final msg in messages) {
+                                        await TransactionHelper.saveSlipAsTransaction(msg, Map<String, dynamic>.from(msg.slipData!));
+                                        saved++;
+                                      }
+                                      if (context.mounted) {
+                                        showTopRightToast(context, "บันทึก $saved รายการเรียบร้อย!");
+                                      }
+                                    } : null,
+                                  );
+                                }
                               );
                             }
                           ),
@@ -141,13 +147,18 @@ class _ChatLandingScreenState extends State<ChatLandingScreen> with SingleTicker
                         
                         _buildAnimatedItem(
                           delay: 400,
-                          child: _buildCleanChatCard(
-                            context,
-                            title: "บันทึกรายรับ",
-                            subtitle: "บันทึกเงินเดือน หรือรายได้อื่นๆ",
-                            icon: Icons.savings_rounded,
-                            color: Colors.green,
-                            mode: ChatMode.income,
+                          child: Consumer<AppGlobalProvider>(
+                            builder: (context, provider, _) {
+                              return _buildCleanChatCard(
+                                context,
+                                title: "บันทึกรายรับ",
+                                subtitle: "บันทึกเงินเดือน หรือรายได้อื่นๆ",
+                                icon: Icons.savings_rounded,
+                                color: Colors.green,
+                                mode: ChatMode.income,
+                                notificationCount: provider.pendingCount - provider.pendingSlips.length, // Only income part
+                              );
+                            }
                           ),
                         ),
                         
