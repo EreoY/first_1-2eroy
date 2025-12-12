@@ -7,6 +7,8 @@ import '../services/scan_history_service.dart';
 import '../services/database_service.dart';
 import '../models/chat_message.dart';
 
+import '../services/receipt_processor.dart';
+import '../core/constants.dart'; // For ChatMode and Prompts
 import 'dart:async'; // Add async import for Timer
 
 class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -201,5 +203,67 @@ class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
   void clearPendingSlips() {
     _pendingSlips.clear();
     notifyListeners();
+  }
+  // Centralized Message Processing (Survives Screen Transitions)
+  Future<void> processUserMessage(String text, ChatMode mode) async {
+    // 1. Add User Message
+    final userMsg = ChatMessage(
+      text: text,
+      isUser: true,
+      timestamp: DateTime.now(),
+      mode: mode.name,
+    );
+    await DatabaseService().addChatMessage(userMsg);
+
+    // 2. Select Prompt based on Mode
+    final String promptTemplate = mode == ChatMode.expense 
+        ? AppConstants.kExpenseSystemPrompt 
+        : AppConstants.kIncomeSystemPrompt;
+
+    try {
+      // 3. Process with AI
+      final processor = ReceiptProcessor(_aiService);
+      final results = await processor.processInputSteps(text, promptTemplate: promptTemplate);
+
+      // 4. Add AI Response Message
+      String responseText;
+      List<Map<String, dynamic>>? expenseData;
+      
+      if (mode == ChatMode.expense) {
+        if (results.isNotEmpty) {
+           responseText = "เจอ ${results.length} รายการครับ ตรวจสอบความถูกต้องแล้วกดบันทึกได้เลย";
+           expenseData = results;
+        } else {
+           responseText = "ไม่พบรายการค่าใช้จ่ายในข้อความครับ";
+        }
+      } else {
+        // Income Mode
+        if (results.isNotEmpty) {
+           responseText = "เจอรายการรับครับ ตรวจสอบแล้วบันทึกได้เลย";
+           expenseData = results; 
+        } else {
+           responseText = "ไม่พบยอดเงินในข้อความครับ";
+        }
+      }
+
+      final aiMsg = ChatMessage(
+        text: responseText,
+        isUser: false,
+        timestamp: DateTime.now(),
+        expenseData: expenseData,
+        mode: mode.name,
+      );
+      await DatabaseService().addChatMessage(aiMsg);
+
+    } catch (e) {
+      // Error Message
+      final errorMsg = ChatMessage(
+        text: "เกิดข้อผิดพลาด: $e",
+        isUser: false,
+        timestamp: DateTime.now(),
+        mode: mode.name,
+      );
+      await DatabaseService().addChatMessage(errorMsg);
+    }
   }
 }

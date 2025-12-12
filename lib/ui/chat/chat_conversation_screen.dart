@@ -21,7 +21,9 @@ import '../folder_selection_screen.dart';
 import '../../services/theme_service.dart';
 import '../widgets/typing_indicator.dart';
 import '../../utils/transaction_helper.dart';
-
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart'; // For Clipboard
+import '../bill_scanner_screen.dart';
 class ChatConversationScreen extends StatefulWidget {
   final ChatMode mode;
   final VoidCallback? onBack; // Callback for nested navigation
@@ -97,69 +99,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _controller.clear();
     FocusScope.of(context).unfocus();
 
-    // 1. Add User Message
-    final userMsg = ChatMessage(
-      text: text,
-      isUser: true,
-      timestamp: DateTime.now(),
-      mode: widget.mode.name, // Save mode
-    );
-    await DatabaseService().addChatMessage(userMsg);
-    _scrollToBottom();
-
     setState(() {
       _isProcessing = true;
     });
+    _scrollToBottom();
 
     try {
-      // 2. Select Prompt based on Mode
-      final String promptTemplate = widget.mode == ChatMode.expense 
-          ? AppConstants.kExpenseSystemPrompt 
-          : AppConstants.kIncomeSystemPrompt;
-
-      // 3. Process with AI
-      final processor = ReceiptProcessor(_aiService);
-      final results = await processor.processInputSteps(text, promptTemplate: promptTemplate);
-
-      // 4. Add AI Response Message
-      String responseText;
-      List<Map<String, dynamic>>? expenseData;
-      
-      if (widget.mode == ChatMode.expense) {
-        if (results.isNotEmpty) {
-           responseText = "เจอ ${results.length} รายการครับ ตรวจสอบความถูกต้องแล้วกดบันทึกได้เลย";
-           expenseData = results;
-        } else {
-           responseText = "ไม่พบรายการค่าใช้จ่ายในข้อความครับ";
-        }
-      } else {
-        // Income Mode
-        if (results.isNotEmpty) {
-           responseText = "เจอรายการรับครับ ตรวจสอบแล้วบันทึกได้เลย";
-           expenseData = results; 
-        } else {
-           responseText = "ไม่พบยอดเงินในข้อความครับ";
-        }
-      }
-
-      final aiMsg = ChatMessage(
-        text: responseText,
-        isUser: false,
-        timestamp: DateTime.now(),
-        expenseData: expenseData,
-        mode: widget.mode.name, // Save mode
-      );
-      await DatabaseService().addChatMessage(aiMsg);
-
+      // Offload to Provider (Background Safe)
+      await context.read<AppGlobalProvider>().processUserMessage(text, widget.mode);
     } catch (e) {
-      // Error Message
-      final errorMsg = ChatMessage(
-        text: "เกิดข้อผิดพลาด: $e",
-        isUser: false,
-        timestamp: DateTime.now(),
-        mode: widget.mode.name, // Save mode
-      );
-      await DatabaseService().addChatMessage(errorMsg);
+      print("Error sending message: $e");
     } finally {
       if (mounted) {
         setState(() {
@@ -232,6 +181,55 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (mounted) {
       setState(() {}); // Refresh UI
       showTopRightToast(context, "ลบรายการแล้ว");
+    }
+  }
+
+  Future<void> _pickAndScanImage(ImageSource source) async {
+    // Show Loading Dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final ImagePicker picker = ImagePicker();
+    XFile? image;
+    
+    try {
+      image = await picker.pickImage(source: source);
+    } catch (e) {
+      print("Error picking image: $e");
+    } finally {
+      // Hide Loading Dialog
+      if (mounted) {
+        Navigator.pop(context); 
+      }
+    }
+
+    if (image != null) {
+      if (!mounted) return;
+      
+      // Navigate to Scanner Screen
+      final String? extractedText = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BillScannerScreen(imageFile: File(image!.path)),
+        ),
+      );
+
+      if (extractedText != null && extractedText.isNotEmpty) {
+        // Populate Text Field
+        setState(() {
+          _controller.text = extractedText;
+        });
+        
+        // Copy to Clipboard
+        await Clipboard.setData(ClipboardData(text: extractedText));
+        
+        if (mounted) {
+          showTopRightToast(context, "Text extracted & copied!");
+        }
+      }
     }
   }
 
@@ -415,11 +413,25 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 ),
                 child: Row(
                   children: [
+                    const SizedBox(width: 4), // Reduced from 8
+                    // Camera Button
+                    IconButton(
+                      visualDensity: VisualDensity.compact, // Compact
+                      icon: Icon(Icons.camera_alt_rounded, color: colorScheme.primary),
+                      onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.camera),
+                    ),
+                    // Gallery Button
+                    IconButton(
+                      visualDensity: VisualDensity.compact, // Compact
+                      icon: Icon(Icons.photo_library_rounded, color: colorScheme.primary),
+                      onPressed: _isProcessing ? null : () => _pickAndScanImage(ImageSource.gallery),
+                    ),
+                    const SizedBox(width: 4), // Reduced from 8
                     Expanded(
                       child: TextField(
                         controller: _controller,
                         decoration: InputDecoration(
-                          hintText: isExpense ? 'พิมพ์รายการจ่าย (เช่น ข้าว 50)' : 'พิมพ์รายรับ (เช่น เงินเดือน 20000)',
+                          hintText: isExpense ? 'พิมพ์รายการจ่าย...' : 'พิมพ์รายรับ...',
                           hintStyle: TextStyle(color: Colors.grey[500]),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
