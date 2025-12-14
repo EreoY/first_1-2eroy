@@ -12,8 +12,13 @@ import 'ui/home_screen.dart';
 
 import 'ui/splash_screen.dart';
 
+import 'package:intl/date_symbol_data_local.dart'; // Import for locale initialization
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Locales
+  await initializeDateFormatting('th_TH', null);
   
   // Initialize Database Service (Handles Hive init and box opening)
   await DatabaseService().init();

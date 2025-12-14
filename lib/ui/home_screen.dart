@@ -22,7 +22,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-
     _tabs = [
       const ChatLandingScreen(),
       const HistoryTab(),

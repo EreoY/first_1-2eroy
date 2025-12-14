@@ -46,12 +46,7 @@ dev_dependencies:
   hive_generator: ^2.0.1
   build_runner: ^2.4.7
 
-flutter_native_splash:
-  color: "#0F172A"
-  image: assets/images/app_logo.png
-  android_12:
-    image: assets/images/app_logo.png
-    color: "#0F172A"
+
 
 flutter:
   uses-material-design: true

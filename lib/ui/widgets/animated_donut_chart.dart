@@ -6,11 +6,13 @@ import '../../utils/category_styles.dart';
 class AnimatedDonutChart extends StatefulWidget {
   final List<Transaction> transactions;
   final double total;
+  final double size;
 
   const AnimatedDonutChart({
     super.key,
     required this.transactions,
     required this.total,
+    this.size = 220,
   });
 
   @override
@@ -51,10 +53,8 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
     // 1. Prepare Data Sections
     Map<String, double> categoryTotals = {};
     for (var t in widget.transactions) {
-      if (t.type == 'expense') {
-        categoryTotals[t.category ?? 'Uncategorized'] = 
-            (categoryTotals[t.category ?? 'Uncategorized'] ?? 0) + t.price;
-      }
+      categoryTotals[t.category ?? 'Uncategorized'] = 
+          (categoryTotals[t.category ?? 'Uncategorized'] ?? 0) + t.price;
     }
 
     final totalExpense = widget.total;
@@ -81,8 +81,8 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
               strokeWidth: 24, // Thick modern stroke
             ),
             child: SizedBox(
-              height: 220,
-              width: 220,
+              height: widget.size,
+              width: widget.size,
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -90,16 +90,16 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
                     Text(
                       "Total Balance",
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: widget.size * 0.06, // Responsive font
                         color: Colors.grey[500],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "฿${widget.total.toStringAsFixed(2)}",
+                      "฿${widget.total.toStringAsFixed(0)}", // Remove decimals for space
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: widget.size * 0.12, // Responsive font
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.onSurface,
                         letterSpacing: -1.0,
