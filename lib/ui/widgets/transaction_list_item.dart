@@ -42,18 +42,15 @@ class TransactionListItem extends StatelessWidget {
               height: 48,
               decoration: BoxDecoration(
                 color: isDark 
-                    ? categoryColor.withOpacity(0.2) 
+                    ? categoryColor.withOpacity(0.15) 
                     : categoryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(14), // Squircle shape
-                border: Border.all(
-                  color: categoryColor.withOpacity(isDark ? 0.3 : 0.1),
-                  width: 1,
-                ),
+                borderRadius: BorderRadius.circular(16), // Softer curve
+                // No border for cleaner look
               ),
               child: Icon(
                 categoryIcon,
                 color: categoryColor,
-                size: 22,
+                size: 24,
               ),
             ),
             

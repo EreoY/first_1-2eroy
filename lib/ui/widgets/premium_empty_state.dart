@@ -63,47 +63,31 @@ class _PremiumEmptyStateState extends State<PremiumEmptyState>
             builder: (context, child) {
               return Transform.translate(
                 offset: Offset(0, _floatAnimation.value),
-                child: Transform.scale(
-                  scale: _scaleAnimation.value,
-                  child: Container(
-                    height: 140,
-                    width: 140,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isDark
-                            ? [
-                                Colors.blueGrey.shade800,
-                                Colors.black,
-                              ]
-                            : [
-                                Colors.white,
-                                Colors.grey.shade200,
-                              ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withOpacity(0.2),
-                          blurRadius: 30,
-                          spreadRadius: 5,
-                          offset: const Offset(10, 10),
-                        ),
-                        BoxShadow(
-                          color: isDark ? Colors.black : Colors.white,
-                          blurRadius: 20,
-                          spreadRadius: -5,
-                          offset: const Offset(-10, -10),
-                        ),
-                      ],
+                child: Container(
+                  height: 120, // Slightly smaller
+                  width: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [Colors.blueGrey.shade800, Colors.black]
+                          : [Colors.white, Colors.grey.shade100],
                     ),
-                    child: Center(
-                      child: Icon(
-                        Icons.account_balance_wallet_outlined,
-                        size: 48,
-                        color: colorScheme.primary.withOpacity(0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.primary.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
                       ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: 40,
+                      color: colorScheme.primary.withOpacity(0.7),
                     ),
                   ),
                 ),

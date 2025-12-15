@@ -32,29 +32,28 @@ class _HistoryTabState extends State<HistoryTab> {
     box = DatabaseService().transactionBox;
   }
   
-  Widget _buildFilterButton(String label, String value, Color color) {
+  Widget _buildFilterIcon(IconData icon, String value, Color color) {
     final isSelected = _filterType == value;
     return GestureDetector(
       onTap: () => setState(() => _filterType = value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          shape: BoxShape.circle,
           border: Border.all(
             color: isSelected ? color : Colors.grey.withOpacity(0.3),
             width: 1.5,
           ),
+          boxShadow: isSelected ? [
+            BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
+          ] : [],
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Kanit',
-            fontSize: 14,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.white : Colors.grey[600],
-          ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isSelected ? Colors.white : Colors.grey[400],
         ),
       ),
     );
@@ -121,157 +120,183 @@ class _HistoryTabState extends State<HistoryTab> {
                 // ==========================================
                 // 1. Header Section: Month Title & Chart
                 // ==========================================
+                // ==========================================
+                // 1. Header Section: Month Title & Chart
+                // ==========================================
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  // padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8), // Removed global padding
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
                     children: [
-                      // Header Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Previous Month
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1);
-                              });
-                            },
-                            icon: Icon(Icons.chevron_left, color: colorScheme.onSurfaceVariant),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          
-                          // Month Title
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                "ภาพรวม", 
-                                style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant, 
-                                  fontSize: 12,
-                                  fontFamily: 'Kanit'
+                      // Header Row (Needs padding now)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Previous Month
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1);
+                                });
+                              },
+                              icon: Icon(Icons.chevron_left, color: colorScheme.onSurfaceVariant),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            
+                            // Month Title
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "ภาพรวม", 
+                                  style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant, 
+                                    fontSize: 12,
+                                    fontFamily: 'Kanit'
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                DateFormat('MMMM yyyy').format(_focusedDay),
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Kanit',
-                                  color: colorScheme.onSurface,
+                                Text(
+                                  DateFormat('MMMM yyyy').format(_focusedDay),
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Kanit',
+                                    color: colorScheme.onSurface,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
 
-                          // Next Month + Toggle Stacked/Row
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1);
-                                  });
-                                },
-                                icon: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              // Toggle Button removed as per user request (Gesture control enabled)
-                            ],
-                          ),
-                        ],
+                            // Next Month
+                            Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1);
+                                    });
+                                  },
+                                  icon: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                       
                       const SizedBox(height: 16),
                       
                       // 2. New Side-by-Side Layout
-                        
-                      // 2. New Side-by-Side Layout
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center, // Center vertically
                         children: [
-                          // Left: Chart
+                          // Left: Filter Column (Side Card)
+                          SlideFadeTransition(
+                            index: 0,
+                            delay: const Duration(milliseconds: 100),
+                            beginOffset: const Offset(-0.5, 0), // Slide from Left
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: theme.cardTheme.color,
+                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(2, 4),
+                                  )
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildFilterIcon(Icons.pie_chart, 'all', colorScheme.primary),
+                                  const SizedBox(height: 12),
+                                  _buildFilterIcon(Icons.arrow_downward, 'income', Colors.green),
+                                  const SizedBox(height: 12),
+                                  _buildFilterIcon(Icons.arrow_upward, 'expense', colorScheme.error),
+                                ],
+                              ),
+                            ),
+                          ),
+                          
+                          const SizedBox(width: 16),
+
+                          // Middle: Chart
                           AnimatedDonutChart(
                             transactions: monthlyTransactions,
                             total: monthlyTotal,
-                            size: 160, // Smaller size for split view
+                            size: 130, // Reduced size
                           ),
                           
                           const SizedBox(width: 16),
                           
                           // Right: Scrollable Category List
                           Expanded(
-                            child: SizedBox(
-                              height: 160, // Match chart height
-                              child: sortedCategories.isEmpty 
-                              ? Center(
-                                  child: Text(
-                                    "No Data", 
-                                    style: TextStyle(color: colorScheme.outlineVariant)
-                                  ),
-                                )
-                              : ListView.separated(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: sortedCategories.length,
-                                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                  itemBuilder: (context, index) {
-                                    final catName = sortedCategories[index].key;
-                                    final catTotal = sortedCategories[index].value;
-                                    
-                                    return Row(
-                                      children: [
-                                        // Icon Dot
-                                        Container(
-                                          width: 8, height: 8,
-                                          decoration: BoxDecoration(
-                                            color: CategoryStyles.getColor(catName),
-                                            shape: BoxShape.circle,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 24), // Add right padding back
+                              child: SizedBox(
+                                height: 140, // Match chart height approx
+                                child: sortedCategories.isEmpty 
+                                ? Center(
+                                    child: Text(
+                                      "No Data", 
+                                      style: TextStyle(color: colorScheme.outlineVariant)
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    padding: EdgeInsets.zero,
+                                    itemCount: sortedCategories.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (context, index) {
+                                      final catName = sortedCategories[index].key;
+                                      final catTotal = sortedCategories[index].value;
+                                      
+                                      return Row(
+                                        children: [
+                                          // Icon Dot
+                                          Container(
+                                            width: 8, height: 8,
+                                            decoration: BoxDecoration(
+                                              color: CategoryStyles.getColor(catName),
+                                              shape: BoxShape.circle,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        // Name
-                                        Expanded(
-                                          child: Text(
-                                            CategoryStyles.getThaiName(catName),
+                                          const SizedBox(width: 8),
+                                          // Name
+                                          Expanded(
+                                            child: Text(
+                                              CategoryStyles.getThaiName(catName),
+                                              style: TextStyle(
+                                                fontFamily: 'Kanit',
+                                                fontSize: 13, // Slightly smaller
+                                                color: colorScheme.onSurface,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          // Amount
+                                          Text(
+                                            NumberFormat.compact().format(catTotal), // Compact format
                                             style: TextStyle(
-                                              fontFamily: 'Kanit',
-                                              fontSize: 14,
+                                              fontFamily: 'Manrope',
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
                                               color: colorScheme.onSurface,
                                             ),
-                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ),
-                                        // Amount
-                                        Text(
-                                          NumberFormat('#,##0').format(catTotal),
-                                          style: TextStyle(
-                                            fontFamily: 'Manrope', // Monospace-ish for numbers
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.onSurface,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                              ),
                             ),
                           ),
                       ],
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Filter Buttons
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildFilterButton("ทั้งหมด", 'all', colorScheme.primary),
-                          const SizedBox(width: 12),
-                          _buildFilterButton("รายรับ", 'income', Colors.green),
-                          const SizedBox(width: 12),
-                          _buildFilterButton("รายจ่าย", 'expense', colorScheme.error),
-                        ],
                       ),
                     ],
                   ),
@@ -283,14 +308,28 @@ class _HistoryTabState extends State<HistoryTab> {
                 // 2. Expandable Calendar Strip
                 // ==========================================
                 GestureDetector(
+                  behavior: HitTestBehavior.translucent, // Ensure touches are caught
+                  onVerticalDragUpdate: (details) {
+                    // Trigger immediately on drag distance, not just velocity
+                    if (details.delta.dy > 5) {
+                      // Dragging Down -> Expand
+                      if (_calendarFormat != CalendarFormat.month) {
+                        setState(() => _calendarFormat = CalendarFormat.month);
+                      }
+                    } else if (details.delta.dy < -5) {
+                      // Dragging Up -> Collapse
+                      if (_calendarFormat != CalendarFormat.week) {
+                        setState(() => _calendarFormat = CalendarFormat.week);
+                      }
+                    }
+                  },
                   onVerticalDragEnd: (details) {
+                    // Fallback for fast swipes
                     if (details.primaryVelocity! > 0) {
-                      // Swipe Down -> Expand to Month
                       if (_calendarFormat != CalendarFormat.month) {
                         setState(() => _calendarFormat = CalendarFormat.month);
                       }
                     } else if (details.primaryVelocity! < 0) {
-                      // Swipe Up -> Collapse to Week
                       if (_calendarFormat != CalendarFormat.week) {
                         setState(() => _calendarFormat = CalendarFormat.week);
                       }
@@ -433,14 +472,20 @@ class _HistoryTabState extends State<HistoryTab> {
                         ),
                         
                         // Drag Handle
-                        Center(
+                        // Drag Handle (Larger Hit Area)
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
                           child: Container(
-                            width: 32,
-                            height: 4,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: colorScheme.outlineVariant,
-                              borderRadius: BorderRadius.circular(2),
+                            width: double.infinity, // Full width touch target
+                            padding: const EdgeInsets.symmetric(vertical: 12), // Larger vertical touch target
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 32,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: colorScheme.outlineVariant,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
                           ),
                         ),
@@ -518,114 +563,118 @@ class _HistoryTabState extends State<HistoryTab> {
                             children: [
                               // Daily Summary Header
                               if (_selectedDay != null)
-                                Container(
-                                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surface,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.03),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      )
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      // Date
-                                      Expanded(
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color: colorScheme.primaryContainer,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Text(
-                                                DateFormat('d').format(_selectedDay!),
-                                                style: TextStyle(
-                                                  fontFamily: 'Manrope',
-                                                  fontWeight: FontWeight.bold,
-                                                  color: colorScheme.primary,
+                                SlideFadeTransition(
+                                  index: 0,
+                                  delay: const Duration(milliseconds: 50),
+                                  child: Container(
+                                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.03),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        )
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Date
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: colorScheme.primaryContainer,
+                                                  shape: BoxShape.circle,
                                                 ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  DateFormat('EEEE').format(_selectedDay!),
-                                                  style: TextStyle(
-                                                    fontFamily: 'Kanit',
-                                                    fontSize: 12,
-                                                    color: colorScheme.onSurfaceVariant,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  DateFormat('MMM yyyy').format(_selectedDay!),
+                                                child: Text(
+                                                  DateFormat('d').format(_selectedDay!),
                                                   style: TextStyle(
                                                     fontFamily: 'Manrope',
-                                                    fontSize: 14,
                                                     fontWeight: FontWeight.bold,
-                                                    color: colorScheme.onSurface,
+                                                    color: colorScheme.primary,
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          ],
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    DateFormat('EEEE').format(_selectedDay!),
+                                                    style: TextStyle(
+                                                      fontFamily: 'Kanit',
+                                                      fontSize: 12,
+                                                      color: colorScheme.onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    DateFormat('MMM yyyy').format(_selectedDay!),
+                                                    style: TextStyle(
+                                                      fontFamily: 'Manrope',
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: colorScheme.onSurface,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      
-                                      // Stats Row (Side by Side)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // Income Pill (if exists)
-                                          if (dailyIncome > 0) ...[
+                                        
+                                        // Stats Row (Side by Side)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // Income Pill (if exists)
+                                            if (dailyIncome > 0) ...[
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  "+ ${NumberFormat('#,##0').format(dailyIncome)}",
+                                                  style: const TextStyle(
+                                                    fontFamily: 'Manrope',
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.green,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                            ],
+                                              
+                                            // Expense Pill
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: Colors.green.withOpacity(0.1),
+                                                color: colorScheme.error.withOpacity(0.1),
                                                 borderRadius: BorderRadius.circular(20),
                                               ),
                                               child: Text(
-                                                "+ ${NumberFormat('#,##0').format(dailyIncome)}",
-                                                style: const TextStyle(
+                                                "- ${NumberFormat('#,##0').format(dailyExpense)}",
+                                                style: TextStyle(
                                                   fontFamily: 'Manrope',
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.green,
+                                                  color: colorScheme.error,
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
                                           ],
-                                            
-                                          // Expense Pill
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: colorScheme.error.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              "- ${NumberFormat('#,##0').format(dailyExpense)}",
-                                              style: TextStyle(
-                                                fontFamily: 'Manrope',
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: colorScheme.error,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
 
@@ -647,75 +696,83 @@ class _HistoryTabState extends State<HistoryTab> {
                                             final catName = sortedGroupKeys[index];
                                             final txs = groupedTransactions[catName]!;
                                             
+                                            Widget child;
+                                            
                                             // 1. Single Item -> Normal Tile
                                             if (txs.length == 1) {
-                                               return TransactionListItem(
+                                               child = TransactionListItem(
                                                   transaction: txs.first,
                                                   onTap: () => _showEditDialog(context, txs.first),
                                                   showDivider: true,
                                                 );
-                                            }
-                                            
-                                            // 2. Multiple Items -> Group Expansion Tile
-                                            final groupTotal = txs.fold(0.0, (sum, t) => sum + t.price);
-                                            final isExpense = txs.any((t) => t.type == 'expense');
-                                            
-                                            return Card(
-                                              elevation: 0,
-                                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                              color: Theme.of(context).cardColor,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.3)),
-                                              ),
-                                              child: Theme(
-                                                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                                                child: ExpansionTile(
-                                                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                                  leading: Container(
-                                                    width: 12, height: 12,
-                                                    decoration: BoxDecoration(
-                                                      color: CategoryStyles.getColor(catName),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                  ),
-                                                  title: Text(
-                                                    CategoryStyles.getThaiName(catName),
-                                                    style: const TextStyle(
-                                                      fontFamily: 'Kanit',
-                                                      fontWeight: FontWeight.w600,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                  subtitle: Text(
-                                                    "${txs.length} รายการ",
-                                                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                                  ),
-                                                  trailing: Text(
-                                                    NumberFormat('#,##0').format(groupTotal),
-                                                    style: TextStyle(
-                                                      fontFamily: 'Manrope',
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: isExpense ? colorScheme.error : Colors.green,
-                                                    ),
-                                                  ),
-                                                  children: txs.map((tx) {
-                                                    return Container(
-                                                      decoration: BoxDecoration(
-                                                        border: Border(
-                                                          top: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.2)),
-                                                        ),
-                                                      ),
-                                                      child: TransactionListItem(
-                                                        transaction: tx,
-                                                        onTap: () => _showEditDialog(context, tx),
-                                                        showDivider: false,
-                                                      ),
-                                                    );
-                                                  }).toList(),
+                                            } else {
+                                              // 2. Multiple Items -> Group Expansion Tile
+                                              final groupTotal = txs.fold(0.0, (sum, t) => sum + t.price);
+                                              final isExpense = txs.any((t) => t.type == 'expense');
+                                              
+                                              child = Card(
+                                                elevation: 0,
+                                                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                                color: Theme.of(context).cardColor,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(16),
+                                                  side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.3)),
                                                 ),
-                                              ),
+                                                child: Theme(
+                                                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                                                  child: ExpansionTile(
+                                                    tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                                    leading: Container(
+                                                      width: 12, height: 12,
+                                                      decoration: BoxDecoration(
+                                                        color: CategoryStyles.getColor(catName),
+                                                        shape: BoxShape.circle,
+                                                      ),
+                                                    ),
+                                                    title: Text(
+                                                      CategoryStyles.getThaiName(catName),
+                                                      style: const TextStyle(
+                                                        fontFamily: 'Kanit',
+                                                        fontWeight: FontWeight.w600,
+                                                        fontSize: 16,
+                                                      ),
+                                                    ),
+                                                    subtitle: Text(
+                                                      "${txs.length} รายการ",
+                                                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                                    ),
+                                                    trailing: Text(
+                                                      NumberFormat('#,##0').format(groupTotal),
+                                                      style: TextStyle(
+                                                        fontFamily: 'Manrope',
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: isExpense ? colorScheme.error : Colors.green,
+                                                      ),
+                                                    ),
+                                                    children: txs.map((tx) {
+                                                      return Container(
+                                                        decoration: BoxDecoration(
+                                                          border: Border(
+                                                            top: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.2)),
+                                                          ),
+                                                        ),
+                                                        child: TransactionListItem(
+                                                          transaction: tx,
+                                                          onTap: () => _showEditDialog(context, tx),
+                                                          showDivider: false,
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                                ),
+                                              );
+                                            }
+
+                                            return SlideFadeTransition(
+                                              index: index + 1, // Start after header
+                                              delay: const Duration(milliseconds: 50),
+                                              child: child,
                                             );
                                           },
                                         ),
@@ -976,6 +1033,74 @@ class _HistoryTabState extends State<HistoryTab> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class SlideFadeTransition extends StatefulWidget {
+  final Widget child;
+  final int index;
+  final Duration delay;
+  final Offset beginOffset;
+
+  const SlideFadeTransition({
+    super.key,
+    required this.child,
+    required this.index,
+    this.delay = const Duration(milliseconds: 50),
+    this.beginOffset = const Offset(0, 0.1),
+  });
+
+  @override
+  State<SlideFadeTransition> createState() => _SlideFadeTransitionState();
+}
+
+class _SlideFadeTransitionState extends State<SlideFadeTransition> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _offsetAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _offsetAnimation = Tween<Offset>(
+      begin: widget.beginOffset,
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutQuad,
+    ));
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+
+    Future.delayed(widget.delay * widget.index, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _offsetAnimation,
+        child: widget.child,
       ),
     );
   }
