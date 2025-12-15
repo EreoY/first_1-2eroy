@@ -8,6 +8,7 @@ import 'services/database_service.dart';
 import 'providers/app_global_provider.dart';
 import 'models/chat_message.dart';
 import 'models/transaction.dart';
+import 'services/notification_service.dart';
 import 'ui/home_screen.dart';
 
 import 'ui/splash_screen.dart';
@@ -22,6 +23,9 @@ void main() async {
   
   // Initialize Database Service (Handles Hive init and box opening)
   await DatabaseService().init();
+
+  // Initialize Notification Service
+  await NotificationService().init();
 
   // Initialize Theme Service
   final themeService = ThemeService();

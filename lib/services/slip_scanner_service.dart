@@ -42,7 +42,27 @@ class SlipScannerService {
   final ImageProcessorService _imageProcessor = ImageProcessorService();
 
   Future<List<File>> fetchNewSlipFiles({bool isManual = false}) async {
-    print("[SlipScanner] Starting Smart Fetch... (Manual: $isManual)");
+    // print("[SlipScanner] Starting Smart Fetch... (Manual: $isManual)");
+
+    // ...
+
+    // print("[SlipScanner] Time Window: $startDateTime to $endDateTime (Scanning Oldest First)");
+
+    // ...
+
+    // print("[SlipScanner] Scanning ${albums.length} albums: ${albums.map((a) => a.name).toList()}");
+
+    // ...
+
+    // print("[SlipScanner] Album '${album.name}': Found $assetCount new assets (Fetched top $fetchCount)");
+
+    // ...
+
+    // print("[SlipScanner] Global Sort: Processing ${sortedAssets.length} unique assets...");
+
+    // ...
+
+    // print("[SlipScanner] Fetch complete. Found ${foundFiles.length} new files.");
     
     // 1. Check Permissions
     final PermissionState ps = await PhotoManager.requestPermissionExtend();

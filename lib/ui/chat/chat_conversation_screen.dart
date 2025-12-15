@@ -180,6 +180,33 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
   }
 
+  Future<void> _saveAllIncome() async {
+    final box = DatabaseService().chatBox;
+    final messages = box.values.where((m) => m.mode == 'income' && !m.isSaved).toList();
+    
+    int savedCount = 0;
+    for (final msg in messages) {
+      if (msg.expenseData != null && msg.expenseData!.isNotEmpty) {
+        final item = msg.expenseData![0];
+        await DatabaseService().addTransaction(
+          item['source'] ?? 'Income',
+          (item['amount'] ?? 0.0).toDouble(),
+          category: 'Salary', // Default category
+          qty: 1.0,
+          date: msg.timestamp,
+          type: 'income',
+        );
+        msg.isSaved = true;
+        await msg.save();
+        savedCount++;
+      }
+    }
+    
+    if (mounted) {
+      showTopRightToast(context, "บันทึกรายรับ $savedCount รายการแล้ว!");
+    }
+  }
+
   Future<void> _deleteMessage(ChatMessage message) async {
     await message.delete(); // Delete from Hive
     if (mounted) {
@@ -526,20 +553,39 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ValueListenableBuilder(
               valueListenable: box.listenable(),
               builder: (context, Box<ChatMessage> box, _) {
-                final unsavedCount = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).length;
-                
-                if (unsavedCount > 0) {
-                  return Positioned(
-                    bottom: 80, // Above input area
-                    right: 16,
-                    child: FloatingActionButton.extended(
-                      onPressed: _saveAllVerified,
-                      label: Text("Save All ($unsavedCount)"),
-                      icon: const Icon(Icons.save_alt),
-                      backgroundColor: colorScheme.tertiaryContainer,
-                      foregroundColor: colorScheme.onTertiaryContainer,
-                    ),
-                  );
+                // Expense Mode: Count Pending Slips
+                if (isExpense) {
+                  final unsavedCount = box.values.where((m) => m.imagePath != null && !m.isSaved && m.slipData != null).length;
+                  if (unsavedCount > 0) {
+                    return Positioned(
+                      bottom: 80,
+                      right: 16,
+                      child: FloatingActionButton.extended(
+                        onPressed: _saveAllVerified,
+                        label: Text("Save All ($unsavedCount)"),
+                        icon: const Icon(Icons.save_alt),
+                        backgroundColor: colorScheme.tertiaryContainer,
+                        foregroundColor: colorScheme.onTertiaryContainer,
+                      ),
+                    );
+                  }
+                } 
+                // Income Mode: Count Pending Proposals
+                else {
+                  final pendingIncomeCount = box.values.where((m) => m.mode == 'income' && !m.isSaved).length;
+                  if (pendingIncomeCount > 0) {
+                    return Positioned(
+                      bottom: 80,
+                      right: 16,
+                      child: FloatingActionButton.extended(
+                        onPressed: _saveAllIncome,
+                        label: Text("Save All ($pendingIncomeCount)"),
+                        icon: const Icon(Icons.save_alt),
+                        backgroundColor: Colors.green.shade100, 
+                        foregroundColor: Colors.green.shade900,
+                      ),
+                    );
+                  }
                 }
                 return const SizedBox.shrink();
               },
