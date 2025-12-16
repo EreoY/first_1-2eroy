@@ -149,14 +149,44 @@ class _ChatLandingScreenState extends State<ChatLandingScreen> with SingleTicker
                           delay: 400,
                           child: Consumer<AppGlobalProvider>(
                             builder: (context, provider, _) {
-                              return _buildCleanChatCard(
-                                context,
-                                title: "บันทึกรายรับ",
-                                subtitle: "บันทึกเงินเดือน หรือรายได้อื่นๆ",
-                                icon: Icons.savings_rounded,
-                                color: Colors.green,
-                                mode: ChatMode.income,
-                                notificationCount: provider.pendingCount - provider.pendingSlips.length, // Only income part
+                              return ValueListenableBuilder(
+                                valueListenable: DatabaseService().chatBox.listenable(),
+                                builder: (context, Box<ChatMessage> box, _) {
+                                  final pendingIncomeCount = box.values.where((m) => m.mode == 'income' && !m.isSaved).length;
+                                  
+                                  return _buildCleanChatCard(
+                                    context,
+                                    title: "บันทึกรายรับ",
+                                    subtitle: "บันทึกเงินเดือน หรือรายได้อื่นๆ",
+                                    icon: Icons.savings_rounded,
+                                    color: Colors.green,
+                                    mode: ChatMode.income,
+                                    notificationCount: pendingIncomeCount,
+                                    onSaveAll: pendingIncomeCount > 0 ? () async {
+                                      final messages = box.values.where((m) => m.mode == 'income' && !m.isSaved).toList();
+                                      int saved = 0;
+                                      for (final msg in messages) {
+                                        if (msg.expenseData != null && msg.expenseData!.isNotEmpty) {
+                                          final item = msg.expenseData![0];
+                                          await DatabaseService().addTransaction(
+                                            item['source'] ?? 'Income',
+                                            (item['amount'] ?? 0.0).toDouble(),
+                                            category: 'Salary',
+                                            qty: 1.0,
+                                            date: msg.timestamp,
+                                            type: 'income',
+                                          );
+                                          msg.isSaved = true;
+                                          await msg.save();
+                                          saved++;
+                                        }
+                                      }
+                                      if (context.mounted) {
+                                        showTopRightToast(context, "บันทึก $saved รายการเรียบร้อย!");
+                                      }
+                                    } : null,
+                                  );
+                                }
                               );
                             }
                           ),

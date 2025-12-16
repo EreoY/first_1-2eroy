@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../folder_selection_screen.dart';
+import 'dart:io';
+import '../../services/notification_service.dart';
 import '../../services/theme_service.dart';
 
 class SettingsTab extends StatelessWidget {
@@ -118,12 +120,64 @@ class SettingsTab extends StatelessWidget {
                               ),
                               _buildSettingsTile(
                                 context,
-                                title: "การแจ้งเตือน",
-                                subtitle: "เตือนให้จดบันทึกตอนเย็น",
+                                title: "Auto-track",
+                                subtitle: "บันทึกจากแจ้งเตือนธนาคาร",
                                 icon: Icons.notifications_active_rounded,
                                 color: Colors.orangeAccent,
                                 onTap: () {},
-                                comingSoon: true,
+                                trailing: StatefulBuilder(
+                                  builder: (context, setState) {
+                                    final service = NotificationService();
+                                    return Switch.adaptive(
+                                      value: service.isListening, 
+                                      activeColor: colorScheme.primary,
+                                      onChanged: (val) async {
+                                        if (Platform.isIOS) {
+                                          await showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: const Text("Not Supported"),
+                                              content: const Text("ฟีเจอร์นี้ไม่รองรับบน iOS เนื่องจากข้อจำกัดด้านความเป็นส่วนตัวของ Apple"),
+                                              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("ตกลง"))],
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        if (val) {
+                                          // Enable Flow
+                                          final confirm = await showDialog<bool>(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: const Text("Privacy Warning"),
+                                              content: const Text("ฟีเจอร์นี้จะทำการอ่านแจ้งเตือนจากแอปธนาคารเพื่อบันทึกรายการอัตโนมัติ\n\nข้อมูลจะถูกบันทึกในเครื่องเท่านั้น ไม่มีการส่งออกภายนอก"),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("ยกเลิก")),
+                                                TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("ยอมรับ")),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirm == true) {
+                                            final granted = await service.requestPermission();
+                                            // Since requestPermission just opens settings, we should check again or assume they might have granted it.
+                                            // A better UX would be to wait for lifecycle resume, but for now:
+                                            if (granted) {
+                                              // Wait a bit for user to potentially toggle it (though they are in another app)
+                                              // Actually, we can't wait here.
+                                              // We just try to start. If it fails, it fails.
+                                              await service.startListening();
+                                            }
+                                          }
+                                        } else {
+                                          // Disable
+                                          await service.stopListening();
+                                        }
+                                        setState(() {}); // Rebuild switch
+                                      },
+                                    );
+                                  },
+                                ),
                               ),
                             ],
                           ),

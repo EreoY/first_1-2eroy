@@ -25,59 +25,61 @@ class _HistoryTabState extends State<HistoryTab> {
   String _filterType = 'all'; // 'all', 'expense', 'income'
 
   late final Box<Transaction> box;
+  bool _isSummaryVisible = true;
 
   @override
   void initState() {
     super.initState();
     box = DatabaseService().transactionBox;
+    // Load persisted state
+    final settings = DatabaseService().settingsBox;
+    _isSummaryVisible = settings.get('history_summary_visible', defaultValue: true);
   }
-  
-  Widget _buildFilterIcon(IconData icon, String value, Color color) {
+
+  Widget _buildFilterTab(IconData icon, String value, Color color, String label) {
     final isSelected = _filterType == value;
+    final isExpanded = !_isSummaryVisible;
+
     return GestureDetector(
       onTap: () => setState(() => _filterType = value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), // Reduced padding
         decoration: BoxDecoration(
-          color: isSelected ? color : Colors.transparent,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? color : Colors.grey.withOpacity(0.3),
-            width: 1.5,
-          ),
-          boxShadow: isSelected ? [
-            BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
-          ] : [],
+          color: isSelected ? color.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
         ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: isSelected ? Colors.white : Colors.grey[400],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? color : Colors.grey[400],
+            ),
+            if (isExpanded) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Kanit',
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? color : Colors.grey[600],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  // 1. Logic to get filtered transactions
-  List<Transaction> _getTransactionsForDay(DateTime day) {
-    return box.values.where((tx) {
-      return isSameDay(tx.date, day);
-    }).toList()
-      ..sort((a, b) => b.date.compareTo(a.date)); // Newest first
-  }
-  
   // Logic for Monthly Totals (Context for Charts)
   List<Transaction> _getTransactionsForMonth(DateTime month) {
      return box.values
         .where((ts) => ts.date.year == month.year && ts.date.month == month.month)
         .toList();
-  }
-  
-  double _calculateMonthTotal(List<Transaction> transactions) {
-    return transactions
-      .where((tx) => tx.type == 'expense')
-      .fold(0.0, (sum, tx) => sum + tx.price);
   }
 
   @override
@@ -85,7 +87,6 @@ class _HistoryTabState extends State<HistoryTab> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -97,7 +98,6 @@ class _HistoryTabState extends State<HistoryTab> {
             final allMonthlyTransactions = _getTransactionsForMonth(_focusedDay);
             
             // Filter for Chart/Category Display
-            // Rule: 'All' -> Show Expense in Chart. 'Expense' -> Expense. 'Income' -> Income.
             final chartFilterType = _filterType == 'income' ? 'income' : 'expense';
             final monthlyTransactions = allMonthlyTransactions
                 .where((tx) => tx.type == chartFilterType)
@@ -105,7 +105,7 @@ class _HistoryTabState extends State<HistoryTab> {
                 
             final monthlyTotal = monthlyTransactions.fold(0.0, (sum, tx) => sum + tx.price);
             
-            // 1. Calculate Category Stats
+            // Calculate Category Stats
             final Map<String, double> categoryStats = {};
             for (var tx in monthlyTransactions) {
               final cat = tx.category ?? 'Uncategorized';
@@ -234,23 +234,19 @@ class _HistoryTabState extends State<HistoryTab> {
                 // 2. Expandable Calendar Strip
                 // ==========================================
                 GestureDetector(
-                  behavior: HitTestBehavior.translucent, // Ensure touches are caught
+                  behavior: HitTestBehavior.translucent,
                   onVerticalDragUpdate: (details) {
-                    // Trigger immediately on drag distance, not just velocity
                     if (details.delta.dy > 5) {
-                      // Dragging Down -> Expand
                       if (_calendarFormat != CalendarFormat.month) {
                         setState(() => _calendarFormat = CalendarFormat.month);
                       }
                     } else if (details.delta.dy < -5) {
-                      // Dragging Up -> Collapse
                       if (_calendarFormat != CalendarFormat.week) {
                         setState(() => _calendarFormat = CalendarFormat.week);
                       }
                     }
                   },
                   onVerticalDragEnd: (details) {
-                    // Fallback for fast swipes
                     if (details.primaryVelocity! > 0) {
                       if (_calendarFormat != CalendarFormat.month) {
                         setState(() => _calendarFormat = CalendarFormat.month);
@@ -287,7 +283,7 @@ class _HistoryTabState extends State<HistoryTab> {
                             // Style & Formatting
                             headerVisible: false,
                             daysOfWeekHeight: 24,
-                            rowHeight: 60, // Taller for icons
+                            rowHeight: 60,
                             startingDayOfWeek: StartingDayOfWeek.monday,
                             
                             calendarStyle: CalendarStyle(
@@ -339,7 +335,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       color: colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(14), // Squircle
+                                      borderRadius: BorderRadius.circular(14),
                                       boxShadow: [
                                         BoxShadow(
                                           color: colorScheme.primary.withOpacity(0.4),
@@ -399,7 +395,6 @@ class _HistoryTabState extends State<HistoryTab> {
                                }
                             },
                             onPageChanged: (focusedDay) {
-                              // Sync focus when swiping
                               setState(() {
                                 _focusedDay = focusedDay;
                               });
@@ -408,12 +403,11 @@ class _HistoryTabState extends State<HistoryTab> {
                         ),
                         
                         // Drag Handle
-                        // Drag Handle (Larger Hit Area)
                         GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           child: Container(
-                            width: double.infinity, // Full width touch target
-                            padding: const EdgeInsets.symmetric(vertical: 12), // Larger vertical touch target
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             alignment: Alignment.center,
                             child: Container(
                               width: 32,
@@ -437,13 +431,11 @@ class _HistoryTabState extends State<HistoryTab> {
                   child: GestureDetector(
                     onHorizontalDragEnd: (details) {
                       if (details.primaryVelocity! > 0) {
-                        // Swipe Right -> Previous Day
                         setState(() {
                           _selectedDay = _selectedDay?.subtract(const Duration(days: 1));
                           _focusedDay = _selectedDay ?? _focusedDay;
                         });
                       } else if (details.primaryVelocity! < 0) {
-                        // Swipe Left -> Next Day
                         setState(() {
                           _selectedDay = _selectedDay?.add(const Duration(days: 1));
                           _focusedDay = _selectedDay ?? _focusedDay;
@@ -452,20 +444,18 @@ class _HistoryTabState extends State<HistoryTab> {
                     },
                     child: Container(
                       color: theme.cardTheme.color, 
-                      child: Builder( // Filter Logic inside main builder
+                      child: Builder(
                         builder: (context) {
                           var dailyTransactions = _selectedDay != null 
                               ? box.values.where((tx) => isSameDay(tx.date, _selectedDay!)).toList()
                               : <Transaction>[];
                           
-                          // Filter by Type
                           if (_filterType != 'all') {
                             dailyTransactions = dailyTransactions
                                 .where((tx) => tx.type == _filterType)
                                 .toList();
                           }
                           
-                          // 1. Sort & Group
                           dailyTransactions.sort((a, b) => b.date.compareTo(a.date));
                           
                           final Map<String, List<Transaction>> groupedTransactions = {};
@@ -477,7 +467,6 @@ class _HistoryTabState extends State<HistoryTab> {
                             groupedTransactions[cat]!.add(tx);
                           }
 
-                          // 2. Sort Groups by Total Amount (Desc)
                           final sortedGroupKeys = groupedTransactions.keys.toList()
                             ..sort((k1, k2) {
                               final total1 = groupedTransactions[k1]!.fold(0.0, (sum, t) => sum + t.price);
@@ -485,7 +474,6 @@ class _HistoryTabState extends State<HistoryTab> {
                               return total2.compareTo(total1);
                             });
 
-                          // 3. Keep Daily Stats
                           final dailyExpense = dailyTransactions
                               .where((tx) => tx.type == 'expense')
                               .fold(0.0, (sum, tx) => sum + tx.price);
@@ -565,11 +553,10 @@ class _HistoryTabState extends State<HistoryTab> {
                                           ),
                                         ),
                                         
-                                        // Stats Row (Side by Side)
+                                        // Stats Row
                                         Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            // Income Pill (if exists)
                                             if (dailyIncome > 0) ...[
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -590,7 +577,6 @@ class _HistoryTabState extends State<HistoryTab> {
                                               const SizedBox(width: 8),
                                             ],
                                               
-                                            // Expense Pill
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               decoration: BoxDecoration(
@@ -620,7 +606,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                   duration: const Duration(milliseconds: 300),
                                   child: dailyTransactions.isEmpty
                                       ? PremiumEmptyState(
-                                          key: ValueKey('empty_\$_selectedDay'), // Force refresh on day change
+                                          key: ValueKey('empty_\$_selectedDay'),
                                           message: "ไม่มีรายการ",
                                           subMessage: "เลือกวันที่อื่น หรือกด + เพื่อเพิ่ม",
                                         )
@@ -636,7 +622,6 @@ class _HistoryTabState extends State<HistoryTab> {
                                             
                                             Widget child;
                                             
-                                            // 1. Single Item -> Normal Tile
                                             if (txs.length == 1) {
                                                child = TransactionListItem(
                                                   transaction: txs.first,
@@ -644,7 +629,6 @@ class _HistoryTabState extends State<HistoryTab> {
                                                   showDivider: true,
                                                 );
                                             } else {
-                                              // 2. Multiple Items -> Group Expansion Tile
                                               final groupTotal = txs.fold(0.0, (sum, t) => sum + t.price);
                                               final isExpense = txs.any((t) => t.type == 'expense');
                                               
@@ -708,7 +692,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                             }
 
                                             return SlideFadeTransition(
-                                              index: index + 1, // Start after header
+                                              index: index + 1,
                                               delay: const Duration(milliseconds: 50),
                                               child: child,
                                             );
@@ -729,7 +713,6 @@ class _HistoryTabState extends State<HistoryTab> {
         ),
       ),
     );
-
   }
 
   void _showEditDialog(BuildContext context, Transaction transaction) {
@@ -754,11 +737,9 @@ class _HistoryTabState extends State<HistoryTab> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Slip Image (If available)
                   if (transaction.slipImagePath != null && File(transaction.slipImagePath!).existsSync())
                     GestureDetector(
                       onTap: () {
-                        // Show full screen image
                         showDialog(
                           context: context,
                           builder: (ctx) => Dialog(
@@ -805,7 +786,6 @@ class _HistoryTabState extends State<HistoryTab> {
                       ),
                     ),
 
-                  // Date Picker
                   InkWell(
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -851,7 +831,6 @@ class _HistoryTabState extends State<HistoryTab> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Item Name
                   TextFormField(
                     controller: itemController,
                     decoration: const InputDecoration(
@@ -862,7 +841,6 @@ class _HistoryTabState extends State<HistoryTab> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Price & Qty
                   Row(
                     children: [
                       Expanded(
@@ -895,7 +873,6 @@ class _HistoryTabState extends State<HistoryTab> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Category
                   DropdownButtonFormField<String>(
                     value: categories.contains(selectedCategory) ? selectedCategory : 'Uncategorized',
                     decoration: const InputDecoration(
@@ -921,7 +898,6 @@ class _HistoryTabState extends State<HistoryTab> {
               ),
             ),
             actions: [
-              // Delete Button
               TextButton(
                 onPressed: () async {
                   final confirm = await showDialog<bool>(
@@ -940,30 +916,26 @@ class _HistoryTabState extends State<HistoryTab> {
                     ),
                   );
                   
-                  if (confirm == true && context.mounted) {
-                    transaction.delete(); // Hive delete
-                    Navigator.pop(context);
+                  if (confirm == true) {
+                    await transaction.delete();
+                    if (context.mounted) Navigator.pop(context);
                   }
                 },
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
                 child: const Text("ลบรายการ"),
               ),
-              
-              // Cancel
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text("ยกเลิก"),
               ),
-              
-              // Save
               ElevatedButton(
                 onPressed: () {
                   transaction.item = itemController.text;
                   transaction.price = double.tryParse(priceController.text) ?? transaction.price;
-                  transaction.qty = double.tryParse(qtyController.text) ?? 1.0;
+                  transaction.qty = double.tryParse(qtyController.text) ?? 1;
                   transaction.category = selectedCategory;
                   transaction.date = selectedDate;
-                  transaction.save(); // Hive save
+                  transaction.save();
                   Navigator.pop(context);
                 },
                 child: const Text("บันทึก"),
@@ -1009,14 +981,18 @@ class SlideFadeTransition extends StatefulWidget {
   final Widget child;
   final int index;
   final Duration delay;
-  final Offset beginOffset;
+  final Duration duration;
+  final double offset;
+  final Curve curve;
 
   const SlideFadeTransition({
     super.key,
     required this.child,
     required this.index,
     this.delay = const Duration(milliseconds: 50),
-    this.beginOffset = const Offset(0, 0.1),
+    this.duration = const Duration(milliseconds: 400),
+    this.offset = 50.0,
+    this.curve = Curves.easeOutQuad,
   });
 
   @override
@@ -1025,35 +1001,26 @@ class SlideFadeTransition extends StatefulWidget {
 
 class _SlideFadeTransitionState extends State<SlideFadeTransition> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<Offset> _offsetAnimation;
   late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: widget.curve),
     );
-
-    _offsetAnimation = Tween<Offset>(
-      begin: widget.beginOffset,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutQuad,
-    ));
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
+    
+    _slideAnimation = Tween<Offset>(begin: Offset(0, 0.2), end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: widget.curve),
     );
 
     Future.delayed(widget.delay * widget.index, () {
       if (mounted) _controller.forward();
     });
   }
-
 
   @override
   void dispose() {
@@ -1066,7 +1033,7 @@ class _SlideFadeTransitionState extends State<SlideFadeTransition> with SingleTi
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
-        position: _offsetAnimation,
+        position: _slideAnimation,
         child: widget.child,
       ),
     );
