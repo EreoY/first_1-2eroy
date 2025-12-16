@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:intl/intl.dart';
 import '../../models/transaction.dart';
 import '../../utils/category_styles.dart';
 
@@ -30,7 +31,7 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOutQuart);
     _controller.forward();
   }
 
@@ -50,65 +51,65 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    // 1. Prepare Data Sections
+    // 1. Prepare Data
     Map<String, double> categoryTotals = {};
     for (var t in widget.transactions) {
       categoryTotals[t.category ?? 'Uncategorized'] = 
           (categoryTotals[t.category ?? 'Uncategorized'] ?? 0) + t.price;
     }
 
-    final totalExpense = widget.total;
+    // Sort Descending
     final sections = categoryTotals.entries.map((e) {
       return _ChartSection(
+        key: e.key,
         value: e.value,
         color: CategoryStyles.getColor(e.key),
       );
-    }).toList();
+    }).toList()..sort((a, b) => b.value.compareTo(a.value));
     
-    // Sort so largest segments are drawn first/logically
-    sections.sort((a, b) => b.value.compareTo(a.value));
+    final total = widget.total > 0 ? widget.total : 1.0;
+    
+    // Layout Constants
+    final chartRadius = widget.size * 0.38; // Maximized radius within fit
 
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        return Transform.scale(
-          scale: _animation.value, // Expand from 0 to 1
-          child: CustomPaint(
-            painter: _DonutChartPainter(
-              sections: sections,
-              total: totalExpense > 0 ? totalExpense : 1, // Prevent div/0
-              progress: _animation.value, // Draw progress
-              strokeWidth: 24, // Thick modern stroke
-            ),
-            child: SizedBox(
-              height: widget.size,
-              width: widget.size,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "Total Balance",
-                      style: TextStyle(
-                        fontSize: widget.size * 0.06, // Responsive font
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "฿${widget.total.toStringAsFixed(0)}", // Remove decimals for space
-                      style: TextStyle(
-                        fontSize: widget.size * 0.12, // Responsive font
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        letterSpacing: -1.0,
-                      ),
-                    ),
-                  ],
+        return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 1. Chart Painter (Glow + Arcs)
+              CustomPaint(
+                size: Size(widget.size, widget.size),
+                painter: _HeroDonutPainter(
+                  sections: sections,
+                  total: total,
+                  progress: _animation.value,
+                  chartRadius: chartRadius,
                 ),
               ),
-            ),
+
+              // 2. Center Text (Hero)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("ยอดรวม", style: TextStyle(fontSize: 14, color: Colors.grey, fontFamily: 'Kanit')),
+                  Text(
+                    NumberFormat.compact().format(widget.total), 
+                    style: TextStyle(
+                      fontSize: 32, // Huge text
+                      fontWeight: FontWeight.w900, // Boldest
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontFamily: 'Manrope',
+                      letterSpacing: -1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },
@@ -117,63 +118,64 @@ class _AnimatedDonutChartState extends State<AnimatedDonutChart> with SingleTick
 }
 
 class _ChartSection {
+  final String key;
   final double value;
   final Color color;
-  _ChartSection({required this.value, required this.color});
+  _ChartSection({required this.key, required this.value, required this.color});
 }
 
-class _DonutChartPainter extends CustomPainter {
+class _HeroDonutPainter extends CustomPainter {
   final List<_ChartSection> sections;
   final double total;
   final double progress;
-  final double strokeWidth;
+  final double chartRadius;
 
-  _DonutChartPainter({
+  _HeroDonutPainter({
     required this.sections,
     required this.total,
     required this.progress,
-    required this.strokeWidth,
+    required this.chartRadius,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
+    final strokeWidth = 35.0;
     
-    // Draw Background Ring
+    // 1. Background Ring (Faded)
     final bgPaint = Paint()
       ..color = Colors.grey.withOpacity(0.1)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
+      ..strokeWidth = strokeWidth - 5; // Slightly thinner than data
     
-    canvas.drawCircle(center, radius, bgPaint);
+    canvas.drawCircle(center, chartRadius, bgPaint);
 
-    // Draw Sections
-    double startAngle = -pi / 2; // Start from top
+    double startAngle = -pi / 2;
     
     for (var section in sections) {
       final sweepAngle = (section.value / total) * 2 * pi * progress;
       
+      // Main Arc Paint (Sharp & Clean)
       final paint = Paint()
         ..color = section.color
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round; // Rounded Caps as requested
+        ..strokeCap = StrokeCap.butt; // Sharp edges
 
       canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
+        Rect.fromCircle(center: center, radius: chartRadius),
         startAngle,
         sweepAngle,
         false,
         paint,
       );
-
+      
       startAngle += sweepAngle;
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.sections != sections;
+  bool shouldRepaint(covariant _HeroDonutPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }

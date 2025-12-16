@@ -115,188 +115,114 @@ class _HistoryTabState extends State<HistoryTab> {
             final sortedCategories = categoryStats.entries.toList()
               ..sort((a, b) => b.value.compareTo(a.value));
             
-            return Column(
-              children: [
-                // ==========================================
-                // 1. Header Section: Month Title & Chart
-                // ==========================================
-                // ==========================================
-                // 1. Header Section: Month Title & Chart
-                // ==========================================
-                Container(
-                  // padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8), // Removed global padding
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      // Header Row (Needs padding now)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // Previous Month
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1);
-                                });
-                              },
-                              icon: Icon(Icons.chevron_left, color: colorScheme.onSurfaceVariant),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            
-                            // Month Title
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "ภาพรวม", 
-                                  style: TextStyle(
-                                    color: colorScheme.onSurfaceVariant, 
-                                    fontSize: 12,
-                                    fontFamily: 'Kanit'
-                                  ),
-                                ),
-                                Text(
-                                  DateFormat('MMMM yyyy').format(_focusedDay),
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'Kanit',
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            // Next Month
-                            Row(
-                              children: [
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1);
-                                    });
-                                  },
-                                  icon: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // 2. New Side-by-Side Layout
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center, // Center vertically
-                        children: [
-                          // Left: Filter Column (Side Card)
-                          SlideFadeTransition(
-                            index: 0,
-                            delay: const Duration(milliseconds: 100),
-                            beginOffset: const Offset(-0.5, 0), // Slide from Left
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: theme.cardTheme.color,
-                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(24)),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(2, 4),
-                                  )
-                                ],
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  // ==========================================
+                  // 1. Header Section: Month Title & Chart
+                  // ==========================================
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      children: [
+                        // 1. Header Row (Month Title)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                onPressed: () => setState(() => _focusedDay = DateTime(_focusedDay.year, _focusedDay.month - 1)),
+                                icon: Icon(Icons.chevron_left, color: colorScheme.onSurfaceVariant),
+                                visualDensity: VisualDensity.compact,
                               ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
+                              Column(
                                 children: [
-                                  _buildFilterIcon(Icons.pie_chart, 'all', colorScheme.primary),
-                                  const SizedBox(height: 12),
-                                  _buildFilterIcon(Icons.arrow_downward, 'income', Colors.green),
-                                  const SizedBox(height: 12),
-                                  _buildFilterIcon(Icons.arrow_upward, 'expense', colorScheme.error),
+                                  Text("ภาพรวม", style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12, fontFamily: 'Kanit')),
+                                  Text(
+                                    DateFormat('MMMM yyyy').format(_focusedDay),
+                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Kanit', color: colorScheme.onSurface),
+                                  ),
                                 ],
                               ),
-                            ),
-                          ),
-                          
-                          const SizedBox(width: 16),
-
-                          // Middle: Chart
-                          AnimatedDonutChart(
-                            transactions: monthlyTransactions,
-                            total: monthlyTotal,
-                            size: 130, // Reduced size
-                          ),
-                          
-                          const SizedBox(width: 16),
-                          
-                          // Right: Scrollable Category List
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 24), // Add right padding back
-                              child: SizedBox(
-                                height: 140, // Match chart height approx
-                                child: sortedCategories.isEmpty 
-                                ? Center(
-                                    child: Text(
-                                      "No Data", 
-                                      style: TextStyle(color: colorScheme.outlineVariant)
-                                    ),
-                                  )
-                                : ListView.separated(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: sortedCategories.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                    itemBuilder: (context, index) {
-                                      final catName = sortedCategories[index].key;
-                                      final catTotal = sortedCategories[index].value;
-                                      
-                                      return Row(
-                                        children: [
-                                          // Icon Dot
-                                          Container(
-                                            width: 8, height: 8,
-                                            decoration: BoxDecoration(
-                                              color: CategoryStyles.getColor(catName),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          // Name
-                                          Expanded(
-                                            child: Text(
-                                              CategoryStyles.getThaiName(catName),
-                                              style: TextStyle(
-                                                fontFamily: 'Kanit',
-                                                fontSize: 13, // Slightly smaller
-                                                color: colorScheme.onSurface,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          // Amount
-                                          Text(
-                                            NumberFormat.compact().format(catTotal), // Compact format
-                                            style: TextStyle(
-                                              fontFamily: 'Manrope',
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: colorScheme.onSurface,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
+                              IconButton(
+                                onPressed: () => setState(() => _focusedDay = DateTime(_focusedDay.year, _focusedDay.month + 1)),
+                                icon: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
+                                visualDensity: VisualDensity.compact,
                               ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 16),
+  
+                        // 2. Fragmented Control (Filters)
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 24),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              _buildSegmentButton('all', 'ทั้งหมด'),
+                              _buildSegmentButton('income', 'รายรับ'),
+                              _buildSegmentButton('expense', 'รายจ่าย'),
+                            ],
+                          ),
+                        ),
+  
+                        const SizedBox(height: 16), // Reduced height
+                        
+                        // 3. Main Content: Big Chart (Centered)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Center(
+                            child: AnimatedDonutChart(
+                              transactions: monthlyTransactions,
+                              total: monthlyTotal,
+                              size: 210, // Adjusted size to fit screen better
                             ),
                           ),
-                      ],
+                        ),
+                        
+                        const SizedBox(height: 16), // Reduced height
+
+                      // 4. Legend (Grid Below Chart)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Wrap(
+                          spacing: 16,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children: sortedCategories.take(6).map((e) {
+                            final pct = monthlyTotal > 0 ? (e.value / monthlyTotal * 100) : 0.0;
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8, height: 8,
+                                  decoration: BoxDecoration(
+                                    color: CategoryStyles.getColor(e.key),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [BoxShadow(color: CategoryStyles.getColor(e.key).withOpacity(0.4), blurRadius: 4)]
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  CategoryStyles.getThaiName(e.key),
+                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant.withOpacity(0.8)),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${pct.toStringAsFixed(0)}%',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ],
                   ),
@@ -377,19 +303,29 @@ class _HistoryTabState extends State<HistoryTab> {
                                 final txs = box.values.where((t) => isSameDay(t.date, date) && t.type == 'expense').toList();
                                 if (txs.isEmpty) return null;
                                 
-                                // Sort by price desc
-                                txs.sort((a, b) => b.price.compareTo(a.price));
-                                final top3 = txs.take(3).toList();
+                                // Group by category and sum prices
+                                final Map<String, double> categoryTotals = {};
+                                for (var tx in txs) {
+                                  final cat = tx.category ?? 'Other';
+                                  categoryTotals[cat] = (categoryTotals[cat] ?? 0) + tx.price;
+                                }
+
+                                // Sort by total amount desc
+                                final sortedCategories = categoryTotals.entries.toList()
+                                  ..sort((a, b) => b.value.compareTo(a.value));
+                                  
+                                final top3WithKey = sortedCategories.take(3).toList();
 
                                 return Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: top3.map((tx) {
+                                  children: top3WithKey.map((entry) {
+                                    final cat = entry.key;
                                     return Container(
                                       margin: const EdgeInsets.symmetric(horizontal: 1),
                                       child: Icon(
-                                        CategoryStyles.getIcon(tx.category ?? 'Other'),
+                                        CategoryStyles.getIcon(cat),
                                         size: 6, // Minimal dot size 
-                                        color: CategoryStyles.getColor(tx.category ?? 'Other'),
+                                        color: CategoryStyles.getColor(cat),
                                       ),
                                     );
                                   }).toList(),
@@ -497,7 +433,7 @@ class _HistoryTabState extends State<HistoryTab> {
                 // ==========================================
                 // 3. Transaction List (Flexible)
                 // ==========================================
-                Expanded(
+                Container(
                   child: GestureDetector(
                     onHorizontalDragEnd: (details) {
                       if (details.primaryVelocity! > 0) {
@@ -679,7 +615,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                 ),
 
                               // Transaction List
-                              Expanded(
+                              Container(
                                 child: AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 300),
                                   child: dailyTransactions.isEmpty
@@ -689,6 +625,8 @@ class _HistoryTabState extends State<HistoryTab> {
                                           subMessage: "เลือกวันที่อื่น หรือกด + เพื่อเพิ่ม",
                                         )
                                       : ListView.builder(
+                                          shrinkWrap: true,
+                                          physics: const NeverScrollableScrollPhysics(),
                                           key: ValueKey(_selectedDay),
                                           padding: const EdgeInsets.only(bottom: 80, top: 0),
                                           itemCount: sortedGroupKeys.length,
@@ -786,7 +724,7 @@ class _HistoryTabState extends State<HistoryTab> {
                   ),
                 ),
               ],
-            );
+            ));
           },
         ),
       ),
@@ -1033,6 +971,35 @@ class _HistoryTabState extends State<HistoryTab> {
             ],
           );
         },
+      ),
+    );
+  }
+  Widget _buildSegmentButton(String key, String label) {
+    final isSelected = _filterType == key;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _filterType = key),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? Theme.of(context).colorScheme.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isSelected 
+              ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))]
+              : [],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 14,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }
