@@ -266,11 +266,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   Future<void> _injectIncomeTemplate(dynamic item) async {
     // item is IncomeSchedule
+    // Manual Input (via Chip) -> Manual Save Only (per user request)
     final msg = ChatMessage(
       text: "บันทึกรายรับ: ${item.title}",
       isUser: false,
       timestamp: DateTime.now(),
       mode: 'income',
+      isSaved: false,
       expenseData: [
         {
           'type': 'income',
@@ -318,11 +320,64 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           onPressed: widget.onBack,
         ) : null,
         actions: [
-          if (isExpense)
-          IconButton(
-            icon: const Icon(Icons.receipt_long),
-            tooltip: 'Scan Slips',
-            onPressed: scanSlips,
+          // Settings Menu
+          Consumer<AppGlobalProvider>( // Helper or Consumer
+            builder: (context, provider, child) {
+              final isExpense = widget.mode == ChatMode.expense;
+              final bool currentAutoSave = isExpense ? provider.isAutoSaveSlips : provider.isAutoSaveIncome;
+
+              return PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert), // Three dots
+                onSelected: (value) async {
+                  if (value == 'scan') {
+                    scanSlips();
+                  } else if (value == 'auto_save') {
+                    final newValue = !currentAutoSave;
+                    if (isExpense) {
+                       await provider.toggleAutoSaveSlips(newValue);
+                    } else {
+                       await provider.toggleAutoSaveIncome(newValue);
+                    }
+                    if (mounted) {
+                      showTopRightToast(
+                        context, 
+                        newValue ? "เปิดการบันทึกอัตโนมัติ" : "ปิดการบันทึกอัตโนมัติ"
+                      );
+                    }
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  // Auto Save Toggle
+                  PopupMenuItem<String>(
+                    value: 'auto_save',
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: currentAutoSave,
+                          onChanged: (bool? value) {
+                             Navigator.pop(context, 'auto_save');
+                          },
+                        ),
+                        const Text('บันทึกอัตโนมัติ'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  // Manual Scan (Only for Expense)
+                  if (widget.mode == ChatMode.expense)
+                    const PopupMenuItem<String>(
+                      value: 'scan',
+                      child: Row(
+                        children: [
+                          Icon(Icons.receipt_long, color: Colors.grey),
+                          SizedBox(width: 8),
+                          Text('สแกนสลิป'),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),

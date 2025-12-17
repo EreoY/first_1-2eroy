@@ -37,8 +37,42 @@ class CategoryStyles {
       'Salary': 'เงินเดือน',
       'Other': 'อื่นๆ',
       'Transfer': 'โอนเงิน',
+      'Investment': 'การลงทุน',
       'Uncategorized': 'ไม่ระบุ',
     };
     return map[category] ?? category;
+  }
+
+  /// แปลง category จากภาษาไทย (LLM output) เป็นภาษาอังกฤษ (Database key)
+  /// รองรับหมวดหมู่หลักเท่านั้น: อาหาร, ช้อปปิ้ง, เดินทาง, บันเทิง, การลงทุน, อื่นๆ
+  static String thaiToEnglish(String thaiCategory) {
+    const map = {
+      'อาหารและเครื่องดื่ม': 'Food',
+      'อาหาร': 'Food',
+      
+      'การเดินทาง': 'Transport',
+      'เดินทาง': 'Transport',
+      
+      'ช้อปปิ้ง': 'Shopping',
+      'สินค้าทั่วไป': 'Shopping',
+      
+      'บิลและสาธารณูปโภค': 'Bills',
+      'บิล': 'Bills',
+      
+      'บันเทิง': 'Entertainment',
+      
+      'สุขภาพ': 'Health',
+      'ยาและสุขภาพ': 'Health',
+      
+      'การลงทุน': 'Investment',
+      
+      'โอนให้เพื่อน/ครอบครัว': 'Transfer',
+      'ชื่อผู้รับโอน': 'Transfer', // Handle "Recipient Name" confusion if LLM outputs this
+      'โอนเงิน': 'Transfer',
+
+      'อื่นๆ': 'Other',
+      'ไม่ระบุ': 'Uncategorized',
+    };
+    return map[thaiCategory] ?? thaiCategory;
   }
 }

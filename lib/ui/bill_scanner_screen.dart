@@ -20,12 +20,12 @@ class BillScannerScreen extends StatefulWidget {
 
 class _BillScannerScreenState extends State<BillScannerScreen> {
   late File _currentImage;
+  File? _processedOriginalImage; // To restore after reset
   bool _isProcessing = false;
   bool _isFiltered = false;
   
   // Scan State
   String? _extractedText; // For final return
-  List<TesseractBlock> _textBlocks = []; // For overlay
   ui.Image? _uiImage; // For scaling coordinates
   bool _isScanned = false;
   
@@ -37,7 +37,6 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
   double _lastScale = 1.0; // To convert screen coords to image coords
   
   // Animation State
-  double _spotlightOpacity = 0.0;
 
   @override
   void initState() {
@@ -67,10 +66,10 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
         if (mounted) {
           setState(() {
             _currentImage = filteredFile;
+            if (auto) _processedOriginalImage = filteredFile; // Save the pristine processed version
             _isFiltered = true;
             _isScanned = false; // Reset scan state
             _extractedText = null;
-            _textBlocks = [];
             _uiImage = null;
           });
           _loadUiImage(_currentImage);
@@ -100,14 +99,32 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
     return img.encodeJpg(processed);
   }
 
+  final TransformationController _transformationController = TransformationController();
+  bool _needsCentering = true;
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  // ... (existing initState)
+
   Future<void> _loadUiImage(File file) async {
     final data = await file.readAsBytes();
     final codec = await ui.instantiateImageCodec(data);
     final frame = await codec.getNextFrame();
-    setState(() {
-      _uiImage = frame.image;
-    });
+    if (mounted) {
+      setState(() {
+        _uiImage = frame.image;
+        _needsCentering = true; // Trigger centering on next build
+      });
+    }
   }
+
+  // ... (existing methods)
+
+
 
   Future<void> _cropImage() async {
     final croppedFile = await ImageCropper().cropImage(
@@ -132,7 +149,6 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
         _isFiltered = false; 
         _isScanned = false;
         _extractedText = null;
-        _textBlocks = [];
         _uiImage = null;
       });
       _loadUiImage(_currentImage);
@@ -154,7 +170,6 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
           _currentImage = rotatedFile;
           _isScanned = false;
           _extractedText = null;
-          _textBlocks = [];
           _uiImage = null;
         });
         _loadUiImage(_currentImage);
@@ -185,7 +200,6 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
       if (_isDrawingMode) {
         _isScanned = false;
         _extractedText = null;
-        _textBlocks = [];
         _roiRect = null; // Reset ROI when starting new drawing
         _activeHandle = null;
       }
@@ -422,29 +436,10 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
 
       print("DEBUG: OCR Output Content: $plainText");
 
-      // Then run HOCR for bounding boxes (Visual only)
-      String hocrOutput = "";
-      try {
-        hocrOutput = await FlutterTesseractOcr.extractHocr(
-          scanFile.path, 
-          language: 'tha+eng',
-          args: {
-            "psm": "4",
-            "preserve_interword_spaces": "1",
-          }
-        );
-      } catch (e) {
-        print("DEBUG: HOCR extraction failed: $e");
-      }
-
-      print("DEBUG: HOCR Output Length: ${hocrOutput.length}");
+      // Removed HOCR (Bounding Boxes) per user request to optimize performance.
+      // "No need to scan to circle the text" -> Single Pass Only.
       
-      // Parse HOCR for bounding boxes
-      final blocks = _parseHocr(hocrOutput);
-      
-      // No need to offset blocks anymore because we cropped the image!
       setState(() {
-        _textBlocks = blocks;
         _extractedText = plainText;
         _isScanned = true;
       });
@@ -461,48 +456,40 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
     }
   }
 
-  List<TesseractBlock> _parseTsv(String tsv) {
-    return [];
-  }
+  // Removed unused OCR helpers
 
-  // Helper class for parsing result
-  HocrResult _parseHocrAndText(String hocr) {
-    // Deprecated
-    return HocrResult([], "");
-  }
-
-  List<TesseractBlock> _parseHocr(String hocr) {
-    final List<TesseractBlock> blocks = [];
-    final RegExp wordRegExp = RegExp(r"<span class='ocrx_word'[^>]*title='bbox (\d+) (\d+) (\d+) (\d+); x_wconf (\d+)'[^>]*>(.*?)</span>");
-    
-    final matches = wordRegExp.allMatches(hocr);
-    for (final match in matches) {
-      try {
-        final left = double.parse(match.group(1)!);
-        final top = double.parse(match.group(2)!);
-        final right = double.parse(match.group(3)!);
-        final bottom = double.parse(match.group(4)!);
-        final conf = int.parse(match.group(5)!);
-        final text = match.group(6)!;
-
-        if (conf > 30 && text.trim().isNotEmpty) {
-           blocks.add(TesseractBlock(
-             rect: Rect.fromLTRB(left, top, right, bottom),
-             text: text,
-             confidence: conf,
-           ));
-        }
-      } catch (e) {
-        print("Error parsing HOCR match: $e");
-      }
-    }
-    return blocks;
-  }
 
   void _confirmAndReturn() {
     if (_extractedText != null) {
       Navigator.pop(context, _extractedText);
     }
+  }
+
+  void _resetScan() {
+    setState(() {
+      _isDrawingMode = true; // Back to Circle mode
+      _roiRect = null;
+      _isScanned = false;
+      _extractedText = null;
+      _drawingPoints = [];
+      _needsCentering = true;
+    });
+    
+    // Restoration Logic
+    if (_processedOriginalImage != null) {
+        // If we have the auto-processed image (grayscale), revert to THAT.
+        // This keeps the "enhanced" look the user likes.
+        setState(() {
+            _currentImage = _processedOriginalImage!;
+        });
+    } else {
+        // Fallback to raw if logic failed
+        setState(() {
+            _currentImage = widget.imageFile;
+        });
+    }
+    
+    _loadUiImage(_currentImage);
   }
 
   @override
@@ -526,26 +513,27 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
             )
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: Center(
-              child: _isProcessing 
-                  ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text("Processing...", style: TextStyle(color: Colors.white)),
-                      ],
+            // Layer 1: Image Viewer (Always at bottom)
+            Positioned.fill(
+                child: _isProcessing 
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text("Processing...", style: TextStyle(color: Colors.white)),
+                        ],
+                      )
                     )
-                  : LayoutBuilder(
+                      : LayoutBuilder(
                       builder: (context, constraints) {
                         if (_uiImage == null) {
-                          return Image.file(_currentImage, fit: BoxFit.contain);
+                          return Center(child: Image.file(_currentImage, fit: BoxFit.contain));
                         }
                         
-                        // Calculate scale to fit image in screen while maintaining aspect ratio
                         final double scaleX = constraints.maxWidth / _uiImage!.width;
                         final double scaleY = constraints.maxHeight / _uiImage!.height;
                         final double scale = scaleX < scaleY ? scaleX : scaleY;
@@ -553,14 +541,29 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                         final double fittedWidth = _uiImage!.width * scale;
                         final double fittedHeight = _uiImage!.height * scale;
 
-                        _lastScale = scale; // Store scale for drawing conversion
+                        _lastScale = scale; 
+
+                        if (_needsCentering) {
+                          _needsCentering = false;
+                          final double dx = (constraints.maxWidth - fittedWidth) / 2;
+                          final double dy = (constraints.maxHeight - fittedHeight) / 2;
+
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                  _transformationController.value = Matrix4.translationValues(dx, dy, 0);
+                              }
+                          });
+                        }
 
                       return InteractiveViewer(
+                          transformationController: _transformationController,
+                          minScale: 1.0,
                           maxScale: 5.0,
                           panEnabled: !_isDrawingMode && _activeHandle == null,
                           scaleEnabled: !_isDrawingMode && _activeHandle == null,
-                          child: Center(
-                            child: Listener(
+                          boundaryMargin: EdgeInsets.all(max(constraints.maxWidth, constraints.maxHeight)), // Allow ample space
+                          constrained: false, // Allow manual positioning
+                          child: Listener( 
                               onPointerDown: _handlePointerDown,
                               child: GestureDetector(
                                 onPanUpdate: (_isDrawingMode || _activeHandle != null) ? _handlePanUpdate : null,
@@ -591,11 +594,6 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                                         painter: RoiPainter(_roiRect!, _uiImage!),
                                         size: Size(fittedWidth, fittedHeight),
                                       ),
-                                    if (_isScanned)
-                                      CustomPaint(
-                                        painter: TesseractOverlayPainter(_textBlocks, _uiImage!),
-                                        size: Size(fittedWidth, fittedHeight),
-                                      ),
                                     if (_isDrawingMode)
                                       CustomPaint(
                                         painter: GlowingPathPainter(_drawingPoints),
@@ -611,7 +609,7 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                                                 child: Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                                     decoration: BoxDecoration(
-                                                        color: Colors.black.withOpacity(0.6),
+                                                        color: Colors.black.withValues(alpha: 0.6),
                                                         borderRadius: BorderRadius.circular(20)
                                                     ),
                                                     child: const Row(
@@ -630,28 +628,123 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                               ),
                             ),
                           ),
-                        ),
-                      );
+                        );
 
                       },
                     ),
             ),
-          ),
-          // Show preview of text if scanned
-          if (_isScanned && _extractedText != null)
-            Container(
-              color: Colors.black54,
-              padding: const EdgeInsets.all(8),
-              width: double.infinity,
-              height: 100,
-              child: SingleChildScrollView(
-                child: Text(
-                  _extractedText!, 
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+            
+            // Layer 2: Bottom Bar (Only visible when NOT scanned to allow access back to reset)
+            if (!_isScanned)
+                Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _buildBottomBar(),
                 ),
-              ),
-            ),
-          _buildBottomBar(),
+
+            // Layer 3: Draggable Text Card (Only when scanned)
+            if (_isScanned && _extractedText != null)
+                DraggableScrollableSheet(
+                    initialChildSize: 0.5,
+                    minChildSize: 0.4, // Increased to prevent overflow/squeeze
+                    maxChildSize: 0.9,
+                    builder: (context, scrollController) {
+                        return Container(
+                            decoration: const BoxDecoration(
+                                color: Color(0xFF1E1E1E),
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                boxShadow: [
+                                    BoxShadow(
+                                        color: Colors.black54,
+                                        blurRadius: 10,
+                                        offset: Offset(0, -5),
+                                    )
+                                ]
+                            ),
+                            child: SingleChildScrollView(
+                              controller: scrollController, // Attached here!
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min, // Important
+                                children: [
+                                    // Handle
+                                    Center(
+                                        child: Container(
+                                            margin: const EdgeInsets.only(top: 12, bottom: 8),
+                                            width: 40,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                                color: Colors.grey[600],
+                                                borderRadius: BorderRadius.circular(2)
+                                            ),
+                                        ),
+                                    ),
+                                    // Header
+                                    Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                        child: Row(
+                                            children: [
+                                                const Icon(Icons.text_fields, color: Colors.blueAccent),
+                                                const SizedBox(width: 8),
+                                                const Text(
+                                                    "Extracted Text", 
+                                                    style: TextStyle(
+                                                        color: Colors.white, 
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 18
+                                                    )
+                                                ),
+                                                const Spacer(),
+                                                // Reset Button (in case they want to scan again)
+                                                IconButton(
+                                                    icon: const Icon(Icons.refresh, color: Colors.grey),
+                                                    onPressed: _resetScan,
+                                                )
+                                            ],
+                                        ),
+                                    ),
+                                    const Divider(color: Colors.grey, height: 1),
+                                    
+                                    // Content Text
+                                    Padding(
+                                        padding: const EdgeInsets.all(20),
+                                        child: Text(
+                                                _extractedText!,
+                                                style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    height: 1.5,
+                                                ),
+                                        ),
+                                    ),
+
+                                    // Confirm Button Area
+                                    Container(
+                                        padding: const EdgeInsets.all(16),
+                                        color: Colors.black12,
+                                        child: SizedBox(
+                                            width: double.infinity,
+                                            child: ElevatedButton(
+                                                onPressed: _confirmAndReturn,
+                                                style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.greenAccent,
+                                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                                    shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(12)
+                                                    )
+                                                ),
+                                                child: const Text("USE THIS TEXT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                                            ),
+                                        ),
+                                    ),
+                                    // Add extra padding at bottom if needed
+                                    const SizedBox(height: 20),
+                                ],
+                              ),
+                            ),
+                        );
+                    },
+                ),
         ],
       ),
     );
@@ -664,17 +757,7 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildToolButton(Icons.restart_alt, "Reset", () {
-             setState(() {
-                 _isDrawingMode = true; // Back to Circle mode
-                 _roiRect = null;
-                 _isScanned = false;
-                 _extractedText = null;
-                 _textBlocks = [];
-                 _drawingPoints = [];
-             });
-             _loadUiImage(_currentImage);
-          }),
+          _buildToolButton(Icons.restart_alt, "Reset", _resetScan),
           _buildToolButton(Icons.rotate_right, "Rotate", _rotateImage),
           _buildToolButton(
             _isDrawingMode ? Icons.auto_awesome : Icons.edit_outlined, 
@@ -822,57 +905,7 @@ class GlowingPathPainter extends CustomPainter {
   bool shouldRepaint(GlowingPathPainter old) => old.points.length != points.length;
 }
 
-class HocrResult {
-  final List<TesseractBlock> blocks;
-  final String fullText;
-
-  HocrResult(this.blocks, this.fullText);
-}
-
-class TesseractBlock {
-  final Rect rect;
-  final String text;
-  final int confidence;
-
-  TesseractBlock({required this.rect, required this.text, required this.confidence});
-}
-
-class TesseractOverlayPainter extends CustomPainter {
-  final List<TesseractBlock> blocks;
-  final ui.Image image;
-
-  TesseractOverlayPainter(this.blocks, this.image);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = Colors.greenAccent;
-
-    // Calculate scale factors
-    final double scaleX = size.width / image.width;
-    final double scaleY = size.height / image.height;
-
-    for (final block in blocks) {
-      final rect = block.rect;
-      final scaledRect = Rect.fromLTRB(
-        rect.left * scaleX,
-        rect.top * scaleY,
-        rect.right * scaleX,
-        rect.bottom * scaleY,
-      );
-      
-      // Draw Box Only (No Text)
-      canvas.drawRect(scaledRect, borderPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(TesseractOverlayPainter oldDelegate) {
-    return oldDelegate.blocks != blocks;
-  }
-}
+// HocrResult, TesseractBlock, TesseractOverlayPainter Removed
 
 
 

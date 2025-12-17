@@ -21,9 +21,11 @@ class LLMIsolateService {
   
   // Request Management
   final Map<int, StreamController<String>> _pendingRequests = {};
+  final Map<int, Completer<void>> _pendingResets = {}; // Track reset completers
   int _nextRequestId = 0;
+  bool _isDisposed = false;
 
-  bool get isReady => _initCompleter.isCompleted;
+  bool get isReady => _initCompleter.isCompleted && !_isDisposed;
 
   Future<void> initialize(String modelPath) async {
     if (_isolate != null) return;
@@ -47,6 +49,13 @@ class LLMIsolateService {
           if (!_initCompleter.isCompleted) {
             _initCompleter.complete();
           }
+        } else if (type == 'reset_done') {
+          // Handle reset completion
+          final id = message['id'] as int;
+          if (_pendingResets.containsKey(id)) {
+            _pendingResets[id]?.complete();
+            _pendingResets.remove(id);
+          }
         } else if (type == 'token') {
           final id = message['id'] as int;
           final token = message['data'] as String;
@@ -65,6 +74,34 @@ class LLMIsolateService {
     });
   }
 
+  /// Reset context before new generation (critical for preventing accumulation)
+  Future<void> resetContext() async {
+    if (!isReady) return;
+    
+    final completer = Completer<void>();
+    final id = _nextRequestId++;
+    
+    // Register completer to be resolved by the main listener
+    _pendingResets[id] = completer;
+    
+    _sendPort!.send({
+      'command': 'reset',
+      'id': id,
+    });
+    
+    // Wait for reset or timeout
+    try {
+      await completer.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          print("[LLMIsolate] ⚠️ Context reset timeout");
+        },
+      );
+    } finally {
+      _pendingResets.remove(id);
+    }
+  }
+
   Stream<String> generateStream(String prompt) async* {
     await _initCompleter.future;
     
@@ -81,9 +118,22 @@ class LLMIsolateService {
     yield* controller.stream;
   }
 
-  void dispose() {
-    _isolate?.kill();
+  Future<void> dispose() async {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    
+    // Close all pending requests
+    for (final controller in _pendingRequests.values) {
+      await controller.close();
+    }
+    _pendingRequests.clear();
+    
+    // Kill isolate
+    _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
+    _sendPort = null;
+    
+    print("[LLMIsolate] Disposed successfully.");
   }
 }
 
@@ -131,6 +181,22 @@ void _isolateEntry(SendPort mainSendPort) {
           print("[LLMIsolate] Failed to load model: $e");
           mainSendPort.send({'type': 'error', 'id': -1, 'error': "Model Load Failed: $e"});
         }
+      }
+      else if (command == 'reset') {
+        // 🔥 CRITICAL: Clear context/KV cache
+        final id = message['id'];
+        try {
+          if (llama != null) {
+            // Force clear by resetting the internal state
+            // This is critical to prevent context accumulation
+            llama!.clear();
+            print("[LLMIsolate] ✅ Context/KV Cache cleared for request $id");
+          }
+          mainSendPort.send({'type': 'reset_done', 'id': id});
+        } catch (e) {
+          print("[LLMIsolate] ⚠️ Failed to reset context: $e");
+          mainSendPort.send({'type': 'reset_done', 'id': id}); // Send anyway to unblock
+        }
       } 
       else if (command == 'generate') {
         final id = message['id'];
@@ -142,11 +208,12 @@ void _isolateEntry(SendPort mainSendPort) {
         }
 
         try {
-           // Reset Prompt for new generation
+           // 🔥 Set new prompt (this should start fresh generation)
            llama!.setPrompt(prompt);
 
            int tokenCount = 0;
            List<int> byteBuffer = [];
+           bool hasOutput = false; // Track if we got any output
            
            while (true) {
              if (tokenCount >= 512) break;
@@ -174,6 +241,7 @@ void _isolateEntry(SendPort mainSendPort) {
                  if (decodedString.isNotEmpty) {
                    mainSendPort.send({'type': 'token', 'id': id, 'data': decodedString});
                    byteBuffer.clear();
+                   hasOutput = true;
                  }
                } catch (_) {
                  // Wait for more bytes
@@ -187,8 +255,16 @@ void _isolateEntry(SendPort mainSendPort) {
            if (byteBuffer.isNotEmpty) {
               try {
                 final remaining = utf8.decode(byteBuffer, allowMalformed: true);
-                mainSendPort.send({'type': 'token', 'id': id, 'data': remaining});
+                if (remaining.isNotEmpty) {
+                  mainSendPort.send({'type': 'token', 'id': id, 'data': remaining});
+                  hasOutput = true;
+                }
               } catch (_) {}
+           }
+           
+           // 🔥 Log if no output was generated (helps debugging)
+           if (!hasOutput) {
+             print("[LLMIsolate] ⚠️ Warning: Generation completed but no tokens were produced!");
            }
            
            mainSendPort.send({'type': 'done', 'id': id});

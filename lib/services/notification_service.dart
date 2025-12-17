@@ -165,23 +165,41 @@ class NotificationService {
 
         final DateTime currentTimestamp = DateTime.now();
 
-        // 1. Add Conversational Message (Bot says: "Money in!")
+        // Check Auto-Save Preference
+        final isAutoSaveIncome = prefs.getBool('auto_save_income') ?? false;
+
+        // 1. Add Conversational Message
         final botMsg = ChatMessage(
-          text: "มีเงินเข้า ${result['amount']} บาท จาก ${result['source']} ครับ 💸",
+          text: isAutoSaveIncome 
+              ? "บันทึกรายรับอัตโนมัติ: ${result['amount']} บาท จาก ${result['source']} ✅"
+              : "มีเงินเข้า ${result['amount']} บาท จาก ${result['source']} ครับ 💸",
           isUser: false,
           timestamp: currentTimestamp,
           mode: 'income',
-          isSaved: true, // Mark as saved so it's just a text bubble, not a pending card
+          isSaved: true,
         );
         await DatabaseService().addChatMessage(botMsg);
 
-        // 2. Add the Proposal Card (Actionable Item)
+        // 2. Perform Auto-Save if enabled
+        if (isAutoSaveIncome) {
+           print("[NotificationService] Auto-saving income transaction...");
+           await DatabaseService().addTransaction(
+              result['source'], // Title
+              (result['amount'] as num).toDouble(),
+              category: 'Salary', // Default
+              qty: 1.0,
+              date: currentTimestamp,
+              type: 'income',
+           );
+        }
+
+        // 3. Add the Proposal Card (Actionable Item)
         final chatMsg = ChatMessage(
           text: "Income Proposal", // Hidden text for card
           isUser: false,
-          timestamp: currentTimestamp.add(const Duration(milliseconds: 100)), // Slight delay order
+          timestamp: currentTimestamp.add(const Duration(milliseconds: 100)),
           mode: 'income',
-          isSaved: false, // Pending state triggers the Card UI
+          isSaved: isAutoSaveIncome, // Mark as saved if auto-saved
           expenseData: [
             {
               'item': result['item'],
@@ -199,7 +217,7 @@ class NotificationService {
         await DatabaseService().addChatMessage(chatMsg);
 
         // Show Feedback Notification
-        _showFeedbackNotification(result['amount'], result['source'], isPending: true);
+        _showFeedbackNotification(result['amount'], result['source'], isPending: !isAutoSaveIncome);
       }
     } catch (e) {
       print("Error in notification handler: $e");

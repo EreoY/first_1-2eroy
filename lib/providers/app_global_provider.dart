@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPrefs
 import '../services/ai_service.dart';
 import '../services/slip_scanner_service.dart';
 import '../services/scan_history_service.dart';
@@ -10,6 +11,7 @@ import '../models/chat_message.dart';
 import '../services/income_scheduler_service.dart';
 import '../services/receipt_processor.dart';
 import '../core/constants.dart'; // For ChatMode and Prompts
+import '../utils/transaction_helper.dart'; // Import TransactionHelper
 import 'dart:async'; // Add async import for Timer
 
 class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -37,6 +39,9 @@ class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
     
     // 0. Register Lifecycle Observer
     WidgetsBinding.instance.addObserver(this);
+
+    // Load Settings
+    await _loadSettings();
     
     // 1. Initialize AI (Background)
     _initAI();
@@ -180,6 +185,33 @@ class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _historyService.updateLastScanTime(album.id);
   }
 
+  bool _isAutoSaveSlips = false;
+  bool get isAutoSaveSlips => _isAutoSaveSlips;
+  
+  bool _isAutoSaveIncome = false;
+  bool get isAutoSaveIncome => _isAutoSaveIncome;
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isAutoSaveSlips = prefs.getBool('auto_save_slips') ?? false;
+    _isAutoSaveIncome = prefs.getBool('auto_save_income') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> toggleAutoSaveSlips(bool value) async {
+    _isAutoSaveSlips = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_save_slips', _isAutoSaveSlips);
+    notifyListeners();
+  }
+
+  Future<void> toggleAutoSaveIncome(bool value) async {
+    _isAutoSaveIncome = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_save_income', _isAutoSaveIncome);
+    notifyListeners();
+  }
+
   Future<void> _processSlipQueue(List<File> files) async {
     for (final file in files) {
       ChatMessage? msg;
@@ -194,15 +226,23 @@ class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (msg.isInBox) {
           final slip = await _scannerService.processImageFile(file);
           if (slip != null) {
-            msg.slipData = {
+            final slipDataMap = {
               'bank': slip.bank,
               'amount': slip.amount,
               'date': slip.date,
               'memo': slip.memo,
               'recipient': slip.recipient,
-              'category': 'Uncategorized', // Default
+              'category': slip.category,
             };
+            
+            msg.slipData = slipDataMap;
             await msg.save(); 
+
+            // Auto Save Logic (Slips)
+            if (_isAutoSaveSlips) {
+              print("[AppGlobalProvider] Auto-saving slip: ${file.path}");
+              await TransactionHelper.saveSlipAsTransaction(msg, slipDataMap);
+            }
           } else {
              msg.slipData = {'error': true};
              msg.text = "Failed to read slip.";
@@ -274,6 +314,10 @@ class AppGlobalProvider extends ChangeNotifier with WidgetsBindingObserver {
         mode: mode.name,
       );
       await DatabaseService().addChatMessage(aiMsg);
+      print("[AppGlobalProvider] Debug: mode=$mode, expenseData=$expenseData");
+      
+      // Auto-Save Logic: REMOVED for manual chat as per user request.
+      // "If we type chat ourselves... we must press save ourselves"
 
     } catch (e) {
       // Error Message

@@ -82,28 +82,53 @@ class IncomeSchedulerService {
       return s.nextDueDate.isBefore(now) || s.nextDueDate.isAtSameMomentAs(now);
     }).toList();
 
-    int newDueCount = 0;
-
     for (final item in dueItems) {
-      // 1. Generate Reminder for THIS due date
-      await _injectReminderMessage(item, item.nextDueDate);
-      newDueCount++;
+      if (provider.isAutoSaveIncome) {
+        // 1. Auto-Save Transaction
+        await _db.addTransaction(
+          item.title,
+          item.amount,
+          category: 'Salary',
+          qty: 1.0,
+          date: item.nextDueDate, // Use due date as transaction date
+          type: 'income',
+        );
+        print("[IncomeScheduler] Auto-saved: ${item.title}");
 
-      // 2. Advance the schedule immediately
+        // 2. Add Message (Marked as Saved)
+        final msg = ChatMessage(
+          text: "💰 บันทึกรายรับอัตโนมัติ: ${item.title}",
+          isUser: false,
+          timestamp: DateTime.now(),
+          mode: 'income',
+          isSaved: true, // Marked as saved
+          expenseData: [
+            {
+              'type': 'income', // Change type to simple income, not reminder, so card shows saved
+              'scheduleId': item.id,
+              'title': item.title,
+              'amount': item.amount,
+              'dueDate': item.nextDueDate.toIso8601String(),
+              'source': item.title, // Ensure compatibility with AIIncomeCard
+            }
+          ],
+        );
+        await _db.addChatMessage(msg);
+      } else {
+        // 1. Generate Reminder for THIS due date (Old Behavior)
+        await _injectReminderMessage(item, item.nextDueDate);
+      }
+
+      // 3. Advance the schedule immediately
       if (item.recurrenceRule == 'manual') {
-        // One-off item (e.g. snoozed), delete it
         await item.delete();
       } else {
-        // Recurring item, calculate next date
         item.nextDueDate = _calculateNextDueDate(item.nextDueDate, item.recurrenceRule);
-        // If the calculated next date is STILL in the past (e.g. user offline for months),
-        // the loop in the NEXT checkDueItems call (or recursion) would handle it.
-        // For safety/performance, we could loop here, but letting the timer handle it is safer to avoid blocking.
         await item.save();
       }
     }
 
-    // Update provider count based on MESSAGES, not schedules anymore
+    // Update provider count based on MESSAGES
     provider.updatePendingIncomeCount();
   }
 

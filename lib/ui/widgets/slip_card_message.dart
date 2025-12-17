@@ -84,27 +84,34 @@ class _SlipCardMessageWidgetState extends State<SlipCardMessageWidget> {
        widget.message.slipData!['memo'] = initialMemo;
     }
 
-    // Smart Category Suggestion (if not already set or Uncategorized)
-    if (data['category'] == null || data['category'] == 'Uncategorized') {
-      // Combine Bank Name, Recipient, and Memo for better context
+    // Smart Category - ใช้จาก LLM ถ้ามี ไม่งั้นใช้ rule-based
+    if (data['category'] != null && data['category'] != 'Uncategorized' && data['category'] != 'อื่นๆ') {
+      // ✅ มี category จาก LLM แล้ว - แปลงจากภาษาไทยเป็นอังกฤษ
+      String llmCategory = data['category'];
+      _selectedCategory = CategoryStyles.thaiToEnglish(llmCategory);
+      
+      // Sync กลับไปที่ data model เป็นภาษาอังกฤษ
+      if (widget.message.slipData == null) {
+        widget.message.slipData = {};
+      }
+      widget.message.slipData!['category'] = _selectedCategory;
+      print("[SlipCard] ✅ ใช้ category จาก LLM: $llmCategory → $_selectedCategory");
+    } else {
+      // ❌ ยังไม่มี category หรือเป็น fallback - ใช้ rule-based
       String recipient = data['recipient'] ?? '';
       String contextText = "$bankName $recipient $initialMemo";
       String suggested = CategoryClassifierService().suggestCategory(contextText);
       if (suggested != 'Uncategorized') {
         _selectedCategory = suggested;
         
-        // FIX: Sync the suggestion back to the data model immediately
         if (widget.message.slipData == null) {
           widget.message.slipData = {};
         }
         widget.message.slipData!['category'] = suggested;
-        // We don't save to Hive here to avoid excessive writes during scroll, 
-        // but the object in memory is now correct for "Save All".
+        print("[SlipCard] ⚠️ Fallback: ใช้ rule-based category: $suggested");
       } else {
         _selectedCategory = 'Uncategorized';
       }
-    } else {
-      _selectedCategory = data['category'];
     }
   }
 

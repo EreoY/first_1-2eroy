@@ -4,6 +4,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'image_processor_service.dart';
 import 'scan_history_service.dart';
+import 'ai_service.dart';
 
 class SlipData {
   final String bank;
@@ -11,6 +12,7 @@ class SlipData {
   final DateTime date;
   final String? memo;
   final String? recipient; // Extracted Shop/Recipient Name
+  final String? category; // ML/LLM Classified Category
   final String? slipImagePath; // Path to the original image file
 
   SlipData({
@@ -19,11 +21,12 @@ class SlipData {
     required this.date, 
     this.memo, 
     this.recipient,
+    this.category,
     this.slipImagePath,
   });
 
   @override
-  String toString() => 'SlipData(bank: $bank, amount: $amount, date: $date, memo: $memo, recipient: $recipient, path: $slipImagePath)';
+  String toString() => 'SlipData(bank: $bank, amount: $amount, date: $date, category: $category, recipient: $recipient, path: $slipImagePath)';
   
   Map<String, dynamic> toMap() {
     return {
@@ -32,6 +35,7 @@ class SlipData {
       'date': date.toIso8601String(),
       'memo': memo,
       'recipient': recipient,
+      'category': category,
       'slipImagePath': slipImagePath,
     };
   }
@@ -40,6 +44,7 @@ class SlipData {
 class SlipScannerService {
   final ScanHistoryService _historyService = ScanHistoryService();
   final ImageProcessorService _imageProcessor = ImageProcessorService();
+  final AIService _aiService = AIService();
 
   Future<List<File>> fetchNewSlipFiles({bool isManual = false}) async {
     // print("[SlipScanner] Starting Smart Fetch... (Manual: $isManual)");
@@ -256,8 +261,19 @@ class SlipScannerService {
     String? recipient = _extractRecipientName(text);
     if (recipient != null) print("[DEBUG_LOGIC] Recipient Detected: $recipient");
 
-    // 4. Detect Memo (Disabled per user request - User wants to type manually)
-    String? memo; // = _detectMemo(text);
+    // 4. Detect Memo (Disabled per user request)
+    String? memo; 
+
+    // 5. Categorize (using Local LLM)
+    String? category;
+    if (recipient != null) {
+      print("[DEBUG_LOGIC] Categorizing recipient: '$recipient' ...");
+      // Critical: Send ONLY the recipient name, NOT the full text
+      category = await _aiService.predictCategory(recipient);
+      print("[DEBUG_LOGIC] Category predicted: $category");
+    } else {
+      category = "อื่นๆ"; // Fallback if no recipient name
+    }
 
     // Date: Use file modification time as proxy
     DateTime date = await file.lastModified();
@@ -268,7 +284,8 @@ class SlipScannerService {
       amount: amount, 
       date: date, 
       memo: memo, 
-      recipient: recipient,
+      recipient: recipient, 
+      category: category,
       slipImagePath: file.path, // Store the path!
     );
     print("[DEBUG_FINAL_OBJECT] Created SlipData: $slip");
@@ -322,27 +339,42 @@ class SlipScannerService {
   }
 
   String? _extractRecipientName(String text) {
-    final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-    
+    final lines = text.split('\n').map((l) => l.trim()).toList();
+
     for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
+      String line = lines[i];
 
-      // Strategy A: Tax ID Pattern (Line Above)
-      // Pattern: (Digits 10-15) e.g., (010753600010286)
-      if (RegExp(r'\(\d{10,15}\)').hasMatch(line)) {
-        if (i > 0) return _cleanRecipientName(lines[i - 1]);
+      // 1. Direct match (e.g., "To: Mr. A")
+      final directMatch = RegExp(r'(?:ถึง|ไปยัง|To|Sent to)\s*[:]?\s*(.+)').firstMatch(line);
+      if (directMatch != null && directMatch.group(1)!.trim().isNotEmpty) {
+        return _cleanRecipientName(directMatch.group(1)!.trim());
       }
 
-      // Strategy B: Label Keywords (Line Above)
-      if (line.startsWith('รหัสร้านค้า') || line.contains('Merchant ID') ||
-          line.startsWith('เลขที่ลูกค้า') || line.contains('Customer ID') ||
-          line.startsWith('เลขที่รายการ') || line.contains('Transaction ID')) {
-        if (i > 0) return _cleanRecipientName(lines[i - 1]);
+      // 2. Multi-line match (Keyword is on one line, Name is on the next)
+      // Example: 
+      // "To"
+      // "7-Eleven"
+      if (RegExp(r'^(ถึง|ไปยัง|To|Sent to)$').hasMatch(line)) {
+        // Check next line
+        if (i + 1 < lines.length && lines[i+1].isNotEmpty) {
+           return _cleanRecipientName(lines[i+1]);
+        }
+        // Check skip-one line (in case of empty gap)
+        if (i + 2 < lines.length && lines[i+2].isNotEmpty) {
+           return _cleanRecipientName(lines[i+2]);
+        }
       }
-
-      // Strategy C: "To" Anchor (Line Below)
-      if (line.contains('ไปยัง') || line.toLowerCase() == 'to' || line.contains('ชำระเงินที่')) {
-        if (i + 1 < lines.length) return _cleanRecipientName(lines[i + 1]);
+      
+      // 3. Special Case for TrueMoney / Wallets
+      if (line.contains('จากวอลเล็ท') || line.contains('From Wallet')) {
+         // Search 3 lines below for a likely name candidate
+         for (int j = 1; j <= 3 && i + j < lines.length; j++) {
+           String candidate = lines[i + j];
+           // Heuristic: Name often starts with Title or is long enough
+           if (candidate.startsWith('นาย') || candidate.startsWith('นาง') || candidate.startsWith('น.s.') || candidate.length > 5) {
+             return _cleanRecipientName(candidate);
+           }
+         }
       }
     }
     return null;

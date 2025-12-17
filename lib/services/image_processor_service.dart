@@ -44,7 +44,7 @@ Future<String> _processImageInIsolate(Map<String, String> args) async {
     image = img.grayscale(image);
 
     // 3. Resize (Upscale/Downscale to standard width)
-    // 1024 is sufficient for OCR and much lighter on RAM than 1800
+    // 720 is sufficient for OCR (Standard Receipt Width) and faster than 1024
     if (image.width != 1024) {
       image = img.copyResize(image, width: 1024);
     }
