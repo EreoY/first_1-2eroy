@@ -30,11 +30,14 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
   bool _isScanned = false;
   
   // Drawing State
-  bool _isDrawingMode = false;
+  bool _isDrawingMode = true; // Default to drawing mode for "Circle to Search" feel
   List<Offset> _drawingPoints = [];
   Rect? _roiRect; // Region of Interest in Image Coordinates
   int? _activeHandle; // 0: TL, 1: TR, 2: BL, 3: BR, null: None
   double _lastScale = 1.0; // To convert screen coords to image coords
+  
+  // Animation State
+  double _spotlightOpacity = 0.0;
 
   @override
   void initState() {
@@ -280,9 +283,26 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
       return;
     }
     
-    if (_isDrawingMode && _drawingPoints.length > 3) {
-      _setRegionOfInterest();
+    if (_isDrawingMode && _drawingPoints.length > 5) {
+      _finishCircleSelection();
+    } else {
+        // Tap or too short drag - clear
+        setState(() {
+            _drawingPoints = [];
+        });
     }
+  }
+
+  void _finishCircleSelection() {
+     _setRegionOfInterest();
+     // Auto-scan after a short delay to let the user see the visual feedback
+     if (_roiRect != null) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && !_isProcessing) {
+                _performScan();
+            }
+        });
+     }
   }
 
   void _setRegionOfInterest() {
@@ -310,7 +330,7 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
 
     setState(() {
       _roiRect = Rect.fromLTWH(roiX, roiY, roiW, roiH);
-      _isDrawingMode = false; // Exit drawing mode
+      _isDrawingMode = false; // Exit drawing mode temporarily to show result
       _drawingPoints = [];
     });
   }
@@ -502,7 +522,7 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
           else
             TextButton(
               onPressed: _isProcessing ? null : _performScan,
-              child: const Text("SCAN", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+              child: const Text("SCAN NOW", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
             )
         ],
       ),
@@ -535,7 +555,7 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
 
                         _lastScale = scale; // Store scale for drawing conversion
 
-                        return InteractiveViewer(
+                      return InteractiveViewer(
                           maxScale: 5.0,
                           panEnabled: !_isDrawingMode && _activeHandle == null,
                           scaleEnabled: !_isDrawingMode && _activeHandle == null,
@@ -556,6 +576,16 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                                       width: fittedWidth,
                                       height: fittedHeight,
                                     ),
+                                    // Spotlight overlay
+                                    if (_roiRect != null)
+                                        CustomPaint(
+                                            painter: SpotlightOverlayPainter(
+                                                roiRect: _roiRect,
+                                                image: _uiImage!,
+                                                drawingPoints: _drawingPoints
+                                            ),
+                                            size: Size(fittedWidth, fittedHeight),
+                                        ),
                                     if (_roiRect != null)
                                       CustomPaint(
                                         painter: RoiPainter(_roiRect!, _uiImage!),
@@ -568,9 +598,33 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
                                       ),
                                     if (_isDrawingMode)
                                       CustomPaint(
-                                        painter: DrawingPainter(_drawingPoints),
+                                        painter: GlowingPathPainter(_drawingPoints),
                                         size: Size(fittedWidth, fittedHeight),
                                       ),
+                                    // Hint Text
+                                    if (_isDrawingMode && _drawingPoints.isEmpty && _roiRect == null)
+                                        Positioned(
+                                            top: 20,
+                                            left: 0,
+                                            right: 0,
+                                            child: Center(
+                                                child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                        color: Colors.black.withOpacity(0.6),
+                                                        borderRadius: BorderRadius.circular(20)
+                                                    ),
+                                                    child: const Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                            Icon(Icons.auto_awesome, color: Colors.cyanAccent, size: 16),
+                                                            SizedBox(width: 8),
+                                                            Text("Circle to Search", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                                        ],
+                                                    )
+                                                )
+                                            ),
+                                        ),
                                   ],
                                 ),
                               ),
@@ -610,11 +664,21 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildToolButton(Icons.crop, "Crop", _cropImage),
+          _buildToolButton(Icons.restart_alt, "Reset", () {
+             setState(() {
+                 _isDrawingMode = true; // Back to Circle mode
+                 _roiRect = null;
+                 _isScanned = false;
+                 _extractedText = null;
+                 _textBlocks = [];
+                 _drawingPoints = [];
+             });
+             _loadUiImage(_currentImage);
+          }),
           _buildToolButton(Icons.rotate_right, "Rotate", _rotateImage),
           _buildToolButton(
-            _isDrawingMode ? Icons.edit_off : Icons.edit, 
-            _isDrawingMode ? "Cancel" : "Draw", 
+            _isDrawingMode ? Icons.auto_awesome : Icons.edit_outlined, 
+            "Circle", 
             _toggleDrawingMode
           ),
         ],
@@ -625,16 +689,137 @@ class _BillScannerScreenState extends State<BillScannerScreen> {
   Widget _buildToolButton(IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: _isProcessing ? null : onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white),
-          const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+            color: label == "Circle" && _isDrawingMode ? const Color(0xFF333333) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: label == "Circle" && _isDrawingMode ? Colors.blueAccent : Colors.white),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(
+                color: label == "Circle" && _isDrawingMode ? Colors.blueAccent : Colors.white, 
+                fontSize: 12,
+                fontWeight: label == "Circle" && _isDrawingMode ? FontWeight.bold : FontWeight.normal
+            )),
+          ],
+        ),
       ),
     );
   }
+}
+
+// ... helper classes ...
+
+class SpotlightOverlayPainter extends CustomPainter {
+    final Rect? roiRect;
+    final ui.Image image;
+    final List<Offset> drawingPoints;
+
+    SpotlightOverlayPainter({this.roiRect, required this.image, required this.drawingPoints});
+
+    @override
+    void paint(Canvas canvas, Size size) {
+        final double scaleX = size.width / image.width;
+        final double scaleY = size.height / image.height;
+
+        final Paint darkPaint = Paint()
+            ..color = Colors.black.withOpacity(0.6)
+            ..style = PaintingStyle.fill;
+
+        // Base Layer: Darken everything
+        // canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), darkPaint);
+        // We need to cut out the hole.
+        
+        // Complex path for hole
+        final Path backgroundPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+        Path cutoutPath = Path();
+
+        if (roiRect != null) {
+            final scaledRect = Rect.fromLTRB(
+                roiRect!.left * scaleX,
+                roiRect!.top * scaleY,
+                roiRect!.right * scaleX,
+                roiRect!.bottom * scaleY,
+            );
+             cutoutPath.addRect(scaledRect);
+        } else if (drawingPoints.isNotEmpty) {
+           // If drawing, maybe don't darken yet? Or darken outside the polygon?
+           // For simplicity, let's only darken when ROI is settled or not darken at all during draw
+           return; 
+        } else {
+            // No ROI, no Drawing -> No spotlight or everything dark? 
+            // Let's keep it clear until user interacts
+            return;
+        }
+
+        final Path finalPath = Path.combine(
+            PathOperation.difference,
+            backgroundPath,
+            cutoutPath,
+        );
+
+        canvas.drawPath(finalPath, darkPaint);
+    }
+
+    @override
+    bool shouldRepaint(covariant SpotlightOverlayPainter oldDelegate) {
+        return oldDelegate.roiRect != roiRect || oldDelegate.drawingPoints.length != drawingPoints.length;
+    }
+}
+
+class GlowingPathPainter extends CustomPainter {
+  final List<Offset> points;
+  
+  GlowingPathPainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    // 1. Outer Glow
+    final Paint glowPaint = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.6)
+      ..strokeWidth = 12.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    // 2. Core Line
+    final Paint corePaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Colors.cyanAccent, Colors.purpleAccent],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final Path path = Path();
+    if (points.isNotEmpty) {
+        path.moveTo(points[0].dx, points[0].dy);
+        for (int i = 1; i < points.length; i++) {
+             // Smooth curves
+             // path.lineTo(points[i].dx, points[i].dy);
+             if (i < points.length - 1) {
+                final p0 = points[i];
+                final p1 = points[i + 1];
+                path.quadraticBezierTo(
+                    p0.dx, p0.dy, 
+                    (p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2
+                );
+             }
+        }
+    }
+
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, corePaint);
+  }
+
+  @override
+  bool shouldRepaint(GlowingPathPainter old) => old.points.length != points.length;
 }
 
 class HocrResult {
@@ -689,28 +874,7 @@ class TesseractOverlayPainter extends CustomPainter {
   }
 }
 
-class DrawingPainter extends CustomPainter {
-  final List<Offset> points;
-  DrawingPainter(this.points);
-  
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.redAccent
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-      
-    for (int i = 0; i < points.length - 1; i++) {
-      if ((points[i] - points[i+1]).distance < 50) { // Simple filter for jumps
-        canvas.drawLine(points[i], points[i+1], paint);
-      }
-    }
-  }
-  
-  @override
-  bool shouldRepaint(DrawingPainter old) => old.points.length != points.length;
-}
+
 
 
 
